@@ -1,139 +1,106 @@
 import tkinter as tk
-from tkinter import filedialog, messagebox
-from tkinter import simpledialog
-from tkinter import ttk
+from tkinter import filedialog, messagebox, simpledialog, ttk
 import networkx as nx
-import csv
-import re
+import csv, re
 from gurobi_solver import GurobiSolver
 
 class GraphEditor:
     def __init__(self, root):
         self.root = root
         self.root.title("Graph Editor")
-        self.graph = nx.Graph()  # Créer un graphe vide
+        self.graph = nx.Graph()
         self.start_node = None
         self.end_node = None
 
-        # Redimensionner la fenêtre pour un look plus moderne
-        self.root.geometry('800x800')
-        self.root.grid_columnconfigure(0, weight=1)
-        self.root.grid_columnconfigure(1, weight=1)
-        self.root.grid_columnconfigure(2, weight=1)
-        self.root.grid_rowconfigure(0, weight=1)
-        self.root.grid_rowconfigure(1, weight=2)
+        # Appliquer un thème ttk moderne
+        style = ttk.Style()
+        style.theme_use('clam')
+        style.configure('TLabelFrame', background='#f0f0f0', borderwidth=2)
+        style.configure('TLabel', background='#f0f0f0', font=('Segoe UI', 10))
+        style.configure('TButton', font=('Segoe UI', 10, 'bold'))
+        style.configure('TEntry', font=('Segoe UI', 10))
+        style.configure('TCombobox', font=('Segoe UI', 10))
+
+        # Grille responsive
+        self.root.geometry('900x600')
+        for i in range(3): self.root.grid_columnconfigure(i, weight=1)
+        for i in range(7): self.root.grid_rowconfigure(i, weight=0)
+        self.root.grid_rowconfigure(1, weight=1)
+        self.root.grid_rowconfigure(6, weight=1)
 
         self.create_widgets()
 
     def create_widgets(self):
-        # Frame pour ajouter un nœud
-        self.add_node_frame = ttk.LabelFrame(self.root, text="Ajouter un Nœud", padding="10")
-        self.add_node_frame.grid(row=0, column=0, padx=10, pady=10, sticky="ew")
+        # Cadre ajout nœud et arête côte-à-côte
+        top_frame = ttk.Frame(self.root)
+        top_frame.grid(row=0, column=0, columnspan=3, sticky='ew', padx=10, pady=5)
+        top_frame.grid_columnconfigure((0,1), weight=1)
 
-        self.node_name_entry = ttk.Entry(self.add_node_frame)
-        self.node_name_entry.grid(row=0, column=0, padx=5, sticky="ew")
-        self.add_node_button = ttk.Button(self.add_node_frame, text="Ajouter", command=self.add_node)
-        self.add_node_button.grid(row=0, column=1, padx=5)
+        # Ajouter nœud
+        node_frame = ttk.LabelFrame(top_frame, text="Ajouter un Nœud", padding=10)
+        node_frame.grid(row=0, column=0, sticky='ew', padx=5)
+        self.node_name_entry = ttk.Entry(node_frame)
+        self.node_name_entry.grid(row=0, column=0, sticky='ew', pady=2)
+        ttk.Button(node_frame, text="Ajouter", command=self.add_node).grid(row=0, column=1, padx=5)
 
-        # Frame pour ajouter une arête
-        self.add_edge_frame = ttk.LabelFrame(self.root, text="Ajouter une Arête", padding="10")
-        self.add_edge_frame.grid(row=0, column=1, padx=10, pady=10, sticky="ew")
+        # Ajouter arête
+        edge_frame = ttk.LabelFrame(top_frame, text="Ajouter une Arête", padding=10)
+        edge_frame.grid(row=0, column=1, sticky='ew', padx=5)
+        self.edge_nodes_entry = ttk.Entry(edge_frame)
+        self.edge_nodes_entry.grid(row=0, column=0, sticky='ew', pady=2)
+        self.edge_weight_entry = ttk.Entry(edge_frame, width=8)
+        self.edge_weight_entry.grid(row=0, column=1, sticky='ew', pady=2)
+        ttk.Button(edge_frame, text="Ajouter", command=self.add_edge).grid(row=0, column=2, padx=5)
 
-        self.edge_nodes_entry = ttk.Entry(self.add_edge_frame)
-        self.edge_nodes_entry.grid(row=0, column=0, padx=5, sticky="ew")
-        self.edge_weight_entry = ttk.Entry(self.add_edge_frame)
-        self.edge_weight_entry.grid(row=0, column=1, padx=5, sticky="ew")
-        self.add_edge_button = ttk.Button(self.add_edge_frame, text="Ajouter", command=self.add_edge)
-        self.add_edge_button.grid(row=0, column=2, padx=5)
+        # Listes nœuds / arêtes
+        list_frame = ttk.Frame(self.root)
+        list_frame.grid(row=1, column=0, columnspan=3, sticky='nsew', padx=10, pady=5)
+        list_frame.grid_columnconfigure((0,1), weight=1)
+        list_frame.grid_rowconfigure(0, weight=1)
 
-        # Zone pour sélectionner les nœuds de départ et d'arrivée
-        self.select_nodes_frame = ttk.LabelFrame(self.root, text="Sélectionner les Nœuds pour le Plus Court Chemin", padding="10")
-        self.select_nodes_frame.grid(row=2, column=0, columnspan=3, padx=10, pady=10, sticky="ew")
+        # Nœuds
+        ttk.Label(list_frame, text="Nœuds").grid(row=0, column=0)
+        self.nodes_listbox = tk.Listbox(list_frame, height=8)
+        self.nodes_listbox.grid(row=1, column=0, sticky='nsew', padx=5)
 
-        self.start_node_combobox = ttk.Combobox(self.select_nodes_frame)
-        self.start_node_combobox.grid(row=0, column=0, padx=5, sticky="ew")
-        self.start_node_combobox.set("Sélectionner un nœud de départ")
+        # Arêtes
+        ttk.Label(list_frame, text="Arêtes").grid(row=0, column=1)
+        self.edges_listbox = tk.Listbox(list_frame, height=8)
+        self.edges_listbox.grid(row=1, column=1, sticky='nsew', padx=5)
 
-        self.end_node_combobox = ttk.Combobox(self.select_nodes_frame)
-        self.end_node_combobox.grid(row=0, column=1, padx=5, sticky="ew")
-        self.end_node_combobox.set("Sélectionner un nœud d'arrivée")
+        # Sélection départ/arrivée
+        select_frame = ttk.LabelFrame(self.root, text="Plus Court Chemin", padding=10)
+        select_frame.grid(row=2, column=0, columnspan=3, sticky='ew', padx=10, pady=5)
+        select_frame.grid_columnconfigure((0,1,2), weight=1)
+        self.start_node_combobox = ttk.Combobox(select_frame, state='readonly')
+        self.start_node_combobox.set('Départ')
+        self.start_node_combobox.grid(row=0, column=0, padx=5)
+        self.end_node_combobox = ttk.Combobox(select_frame, state='readonly')
+        self.end_node_combobox.set('Arrivée')
+        self.end_node_combobox.grid(row=0, column=1, padx=5)
+        ttk.Button(select_frame, text="Résoudre", command=self.solve_graph).grid(row=0, column=2, padx=5)
 
-        # Frame pour les listes de nœuds et arêtes
-        self.list_frame = ttk.Frame(self.root)
-        self.list_frame.grid(row=1, column=0, columnspan=3, padx=10, pady=10, sticky="nsew")
+        # Erreur et résultat
+        self.error_label = ttk.Label(self.root, text='', foreground='red')
+        self.error_label.grid(row=3, column=0, columnspan=3)
+        self.result_text = tk.Text(self.root, height=6, wrap=tk.WORD, state='disabled', font=('Segoe UI', 10))
+        self.result_text.grid(row=4, column=0, columnspan=3, sticky='ew', padx=10, pady=5)
 
-        # Liste pour afficher les nœuds
-        self.nodes_listbox = tk.Listbox(self.list_frame, height=10, width=30)
-        self.nodes_listbox.grid(row=0, column=0, padx=5, pady=5, sticky="ew")
+        # Boutons Load/Save/Modify/Delete
+        btns = ['Charger', 'Sauvegarder', 'Modifier Nœud', 'Supprimer Nœud', 'Modifier Arête', 'Supprimer Arête']
+        cmds = [self.load_graph, self.save_graph, self.modify_node, self.delete_node, self.modify_edge, self.delete_edge]
+        for i, (t,c) in enumerate(zip(btns, cmds)):
+            ttk.Button(self.root, text=t, command=c).grid(row=5 + i//3, column=i%3, sticky='ew', padx=10, pady=5)
 
-        # Liste pour afficher les arêtes
-        self.edges_listbox = tk.Listbox(self.list_frame, height=10, width=30)
-        self.edges_listbox.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
-
-        # Zone d'affichage des erreurs
-        self.error_label = ttk.Label(self.root, text="", foreground="red")
-        self.error_label.grid(row=2, column=0, columnspan=3, pady=5)
-
-        # Boutons pour charger et sauvegarder le graphe
-        self.load_button = ttk.Button(self.root, text="Charger le graphe", command=self.load_graph)
-        self.load_button.grid(row=3, column=0, padx=10, pady=10, sticky="ew")
-
-        self.save_button = ttk.Button(self.root, text="Sauvegarder le graphe", command=self.save_graph)
-        self.save_button.grid(row=3, column=1, padx=10, pady=10, sticky="ew")
-
-        # Boutons pour modifier et supprimer nœuds/arêtes
-        self.modify_node_button = ttk.Button(self.root, text="Modifier Nœud", command=self.modify_node)
-        self.modify_node_button.grid(row=3, column=2, padx=10, pady=10, sticky="ew")
-
-        self.delete_node_button = ttk.Button(self.root, text="Supprimer Nœud", command=self.delete_node)
-        self.delete_node_button.grid(row=4, column=0, padx=10, pady=10, sticky="ew")
-
-        self.modify_edge_button = ttk.Button(self.root, text="Modifier Arête", command=self.modify_edge)
-        self.modify_edge_button.grid(row=4, column=1, padx=10, pady=10, sticky="ew")
-
-        self.delete_edge_button = ttk.Button(self.root, text="Supprimer Arête", command=self.delete_edge)
-        self.delete_edge_button.grid(row=4, column=2, padx=10, pady=10, sticky="ew")
-
-        # Bouton pour résoudre avec Gurobi
-        self.solve_button = ttk.Button(self.root, text="Résoudre", command=self.solve_graph)
-        self.solve_button.grid(row=5, column=0, columnspan=3, padx=10, pady=10, sticky="ew")
-
-        # Zone pour afficher les résultats de Gurobi
-        self.result_text = tk.Text(self.root, height=10, width=50, wrap=tk.WORD, state=tk.DISABLED)
-        self.result_text.grid(row=6, column=0, columnspan=3, padx=10, pady=10)
-
-        # Initialisation du solveur
+        # Init solver
         self.solver = GurobiSolver(self.graph, self.error_label, self.result_text, self.start_node, self.end_node)
 
-    def solve_graph(self):
-        start_node = self.start_node_combobox.get()
-        end_node = self.end_node_combobox.get()
-
-        if start_node == "Sélectionner un nœud de départ" or end_node == "Sélectionner un nœud d'arrivée":
-            self.display_error("Veuillez sélectionner à la fois un nœud de départ et un nœud d'arrivée.")
-        else:
-            # Passer les nœuds de départ et d'arrivée à la méthode de GurobiSolver
-            self.start_node = start_node
-            self.end_node = end_node
-            self.solver.start_node = self.start_node
-            self.solver.end_node = self.end_node
-            self.solver.solve()
-
-
-    def display_error(self, message):
-        self.error_label.config(text=message)
-
     def validate_node_name(self, node_name):
-        """ Valide que le nom du nœud est une chaîne non vide et ne contient que des caractères valides. """
-        if not node_name or not re.match(r'^[a-zA-Z0-9_-]+$', node_name):
-            return False
-        return True
+        return bool(node_name and re.match(r'^[a-zA-Z0-9_-]+$', node_name))
 
     def validate_edge_weight(self, weight):
-        """ Valide que le poids de l'arête est un nombre valide (positif). """
         try:
-            weight = float(weight)
-            return weight >= 0
+            return float(weight) >= 0
         except ValueError:
             return False
 
@@ -144,7 +111,7 @@ class GraphEditor:
                 self.graph.add_node(node_name)
                 self.update_node_list()
                 self.node_name_entry.delete(0, tk.END)
-                self.display_error("")  # Clear previous errors
+                self.display_error("")
             else:
                 self.display_error("Le nœud existe déjà.")
         else:
@@ -162,7 +129,7 @@ class GraphEditor:
                     self.update_edge_list()
                     self.edge_nodes_entry.delete(0, tk.END)
                     self.edge_weight_entry.delete(0, tk.END)
-                    self.display_error("")  # Clear previous errors
+                    self.display_error("")
                 else:
                     self.display_error("Le poids doit être un nombre valide et positif.")
             else:
@@ -171,96 +138,101 @@ class GraphEditor:
             self.display_error("Veuillez remplir tous les champs.")
 
     def modify_node(self):
-        selected_node = self.nodes_listbox.curselection()
-        if selected_node:
-            node_name = self.nodes_listbox.get(selected_node)
-            new_name = simpledialog.askstring("Modifier Nœud", f"Entrez un nouveau nom pour le nœud '{node_name}':")
-            if new_name and new_name != node_name:
-                if self.validate_node_name(new_name):
-                    self.graph = nx.relabel_nodes(self.graph, {node_name: new_name})
-                    self.update_node_list()
-                    self.display_error("")  # Clear previous errors
-                else:
-                    self.display_error("Nom de nœud invalide. Utilisez seulement des lettres, chiffres, tirets et underscores.")
+        sel = self.nodes_listbox.curselection()
+        if sel:
+            node = self.nodes_listbox.get(sel)
+            new_name = simpledialog.askstring("Modifier Nœud", f"Nouveau nom pour '{node}':")
+            if new_name and new_name != node and self.validate_node_name(new_name):
+                nx.relabel_nodes(self.graph, {node: new_name}, copy=False)
+                self.update_node_list()
+                self.display_error("")
             else:
-                self.display_error("Nom de nœud invalide.")
+                self.display_error("Nom invalide ou identique.")
         else:
             self.display_error("Sélectionnez un nœud à modifier.")
 
     def modify_edge(self):
-        selected_edge = self.edges_listbox.curselection()
-        if selected_edge:
-            edge_data = self.edges_listbox.get(selected_edge)
-            nodes, weight = edge_data.split(" : ")
-            node1, node2 = nodes.split(" - ")
-            new_weight = simpledialog.askfloat("Modifier Arête", f"Entrez un nouveau poids pour l'arête {node1}-{node2} :", minvalue=0)
-            if new_weight is not None:
-                self.graph[node1][node2]['weight'] = new_weight
+        sel = self.edges_listbox.curselection()
+        if sel:
+            data = self.edges_listbox.get(sel)
+            nodes, weight = data.split(" : ")
+            u,v = nodes.split(" - ")
+            new_w = simpledialog.askfloat("Modifier Arête", f"Nouveau poids pour {u}-{v}:", minvalue=0)
+            if new_w is not None:
+                self.graph[u][v]['weight'] = new_w
                 self.update_edge_list()
-                self.display_error("")  # Clear previous errors
+                self.display_error("")
         else:
             self.display_error("Sélectionnez une arête à modifier.")
 
     def delete_node(self):
-        selected_node = self.nodes_listbox.curselection()
-        if selected_node:
-            node_name = self.nodes_listbox.get(selected_node)
-            self.graph.remove_node(node_name)
+        sel = self.nodes_listbox.curselection()
+        if sel:
+            node = self.nodes_listbox.get(sel)
+            self.graph.remove_node(node)
             self.update_node_list()
             self.update_edge_list()
-            self.display_error("")  # Clear previous errors
+            self.display_error("")
         else:
             self.display_error("Sélectionnez un nœud à supprimer.")
 
     def delete_edge(self):
-        selected_edge = self.edges_listbox.curselection()
-        if selected_edge:
-            edge_data = self.edges_listbox.get(selected_edge)
-            nodes, _ = edge_data.split(" : ")
-            node1, node2 = nodes.split(" - ")
-            self.graph.remove_edge(node1, node2)
+        sel = self.edges_listbox.curselection()
+        if sel:
+            data = self.edges_listbox.get(sel)
+            nodes, _ = data.split(" : ")
+            u,v = nodes.split(" - ")
+            self.graph.remove_edge(u, v)
             self.update_edge_list()
-            self.display_error("")  # Clear previous errors
+            self.display_error("")
         else:
             self.display_error("Sélectionnez une arête à supprimer.")
 
     def update_node_list(self):
         self.nodes_listbox.delete(0, tk.END)
-        for node in self.graph.nodes:
-            self.nodes_listbox.insert(tk.END, node)
-
-        # Mettre à jour les combobox avec les nœuds
-        self.start_node_combobox['values'] = list(self.graph.nodes)
-        self.end_node_combobox['values'] = list(self.graph.nodes)
+        for n in self.graph.nodes:
+            self.nodes_listbox.insert(tk.END, n)
+        vals = list(self.graph.nodes)
+        self.start_node_combobox.configure(values=vals)
+        self.end_node_combobox.configure(values=vals)
 
     def update_edge_list(self):
         self.edges_listbox.delete(0, tk.END)
-        for edge in self.graph.edges(data=True):
-            edge_display = f"{edge[0]} - {edge[1]} : {edge[2]['weight']}"
-            self.edges_listbox.insert(tk.END, edge_display)
+        for u,v,d in self.graph.edges(data=True):
+            self.edges_listbox.insert(tk.END, f"{u} - {v} : {d['weight']}")
+
+    def solve_graph(self):
+        start = self.start_node_combobox.get()
+        end = self.end_node_combobox.get()
+        if start in self.graph and end in self.graph:
+            self.start_node, self.end_node = start, end
+            self.solver.start_node = start
+            self.solver.end_node = end
+            self.solver.solve()
+        else:
+            self.display_error("Sélectionnez un départ et une arrivée valides.")
 
     def load_graph(self):
-        file_path = filedialog.askopenfilename(filetypes=[("Fichiers CSV", "*.csv")])
-        if file_path:
-            with open(file_path, mode='r') as file:
-                reader = csv.reader(file)
+        path = filedialog.askopenfilename(filetypes=[("CSV", "*.csv")])
+        if path:
+            with open(path) as f:
+                reader = csv.reader(f)
                 for row in reader:
-                    if len(row) == 1:  # Ajouter un nœud
-                        self.graph.add_node(row[0])
-                    elif len(row) == 3:  # Ajouter une arête
-                        self.graph.add_edge(row[0], row[1], weight=float(row[2]))
+                    if len(row)==1: self.graph.add_node(row[0])
+                    elif len(row)==3: self.graph.add_edge(row[0], row[1], weight=float(row[2]))
             self.update_node_list()
             self.update_edge_list()
 
     def save_graph(self):
-        file_path = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("Fichiers CSV", "*.csv")])
-        if file_path:
-            with open(file_path, mode='w') as file:
-                writer = csv.writer(file)
-                for node in self.graph.nodes:
-                    writer.writerow([node])
-                for edge in self.graph.edges(data=True):
-                    writer.writerow([edge[0], edge[1], edge[2]['weight']])
+        path = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("CSV","*.csv")])
+        if path:
+            with open(path, 'w', newline='') as f:
+                writer = csv.writer(f)
+                for n in self.graph.nodes: writer.writerow([n])
+                for u,v,d in self.graph.edges(data=True): writer.writerow([u,v,d['weight']])
+
+    def display_error(self, message):
+        self.error_label.config(text=message)
 
 if __name__ == "__main__":
     root = tk.Tk()
