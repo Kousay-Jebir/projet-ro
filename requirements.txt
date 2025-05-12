@@ -1,0 +1,11 @@
+gurobipy==12.0.2
+networkx==3.4.2
+numpy==2.2.5
+pillow==11.2.1
+PyQt5==5.15.11
+PyQt5-Qt5==5.15.2
+PyQt5_sip==12.17.0
+pyqtgraph==0.13.7
+sv-ttk==2.6.0
+#to install all dependencies run:
+#pip install -r requirements.txt
