@@ -1,43 +1,42 @@
 import gurobipy as grb
-import tkinter as tk
-from tkinter import filedialog, messagebox
-from tkinter import simpledialog
-from tkinter import ttk
+from PyQt5.QtWidgets import QMessageBox, QStatusBar, QTextEdit
 import networkx as nx
-import csv
-import re
 
 
 class GurobiSolver:
-    def __init__(self, graph, error_label, result_text, start_node, end_node):
+    def __init__(self, graph, status_bar: QStatusBar, result_text: QTextEdit, start_node, end_node):
         self.graph = graph
-        self.error_label = error_label
+        self.status_bar = status_bar
         self.result_text = result_text
-        self.start_node = start_node  # Nœud de départ
-        self.end_node = end_node      # Nœud de destination
+        self.start_node = start_node  # Start node
+        self.end_node = end_node      # End node
 
     def solve(self):
         if not self.graph.nodes:
-            self.display_error("Le graphe est vide. Impossible de résoudre le problème.")
+            self.display_error("The graph is empty. Cannot solve the problem.")
             return
 
         try:
             model = grb.Model("ShortestPath")
-            model.setParam('OutputFlag', 0)  # Désactive la sortie Gurobi
+            model.setParam('OutputFlag', 0)  # Disable Gurobi output
 
-            # Ajout des variables binaires pour chaque arête dirigée
+            # Add binary variables for each directed edge
             variables = {}
             for u, v in self.graph.edges:
                 variables[(u, v)] = model.addVar(vtype=grb.GRB.BINARY, name=f"x_{u}_{v}")
 
-            # Fonction objectif : minimiser la somme des poids des arêtes sélectionnées
-            model.setObjective(grb.quicksum(variables[(u, v)] * self.graph[u][v]['weight'] for u, v in self.graph.edges),
-                            sense=grb.GRB.MINIMIZE)
+            # Objective function: minimize total weight of selected edges
+            model.setObjective(
+                grb.quicksum(variables[(u, v)] * self.graph[u][v]['weight'] 
+                for u, v in self.graph.edges),
+                sense=grb.GRB.MINIMIZE
+            )
 
-            # Contraintes de flux :
+            # Flow constraints:
             for node in self.graph.nodes:
                 inflow = grb.quicksum(variables[(u, v)] for (u, v) in self.graph.edges if v == node)
                 outflow = grb.quicksum(variables[(u, v)] for (u, v) in self.graph.edges if u == node)
+                
                 if node == self.start_node:
                     model.addConstr(outflow - inflow == 1, name=f"flow_start_{node}")
                 elif node == self.end_node:
@@ -45,25 +44,33 @@ class GurobiSolver:
                 else:
                     model.addConstr(outflow - inflow == 0, name=f"flow_{node}")
 
-            # Résolution
+            # Solve the model
             model.optimize()
 
             if model.status == grb.GRB.OPTIMAL:
-                result = "Solution optimale trouvée:\n"
+                result = "Optimal solution found:\n"
                 for (u, v) in self.graph.edges:
                     if variables[(u, v)].x > 0.5:
-                        result += f"{u} -> {v} (Poids: {self.graph[u][v]['weight']})\n"
-                self.result_text.config(state=tk.NORMAL)
-                self.result_text.delete(1.0, tk.END)
-                self.result_text.insert(tk.END, result)
-                self.result_text.config(state=tk.DISABLED)
+                        result += f"{u} → {v} (Weight: {self.graph[u][v]['weight']})\n"
+                self.result_text.setPlainText(result)
+                self.status_bar.showMessage("Solution found successfully!", 3000)
             else:
-                self.display_error("Aucune solution optimale trouvée.")
+                self.display_error("No optimal solution found.")
+                
         except grb.GurobiError as e:
-            self.display_error(f"Erreur Gurobi: {e}")
+            self.display_error(f"Gurobi error: {e}")
         except Exception as e:
-            self.display_error(f"Une erreur est survenue: {e}")
-
+            self.display_error(f"An error occurred: {e}")
 
     def display_error(self, message):
-        self.error_label.config(text=message)
+        """Display error message in status bar and show a message box"""
+        self.status_bar.showMessage(message, 5000)  # Show for 5 seconds
+        self.show_message("Error", message)
+
+    def show_message(self, title, message):
+        """Show a modal error message dialog"""
+        msg = QMessageBox()
+        msg.setIcon(QMessageBox.Critical)
+        msg.setWindowTitle(title)
+        msg.setText(message)
+        msg.exec_()

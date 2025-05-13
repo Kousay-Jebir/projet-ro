@@ -1,100 +1,323 @@
-import tkinter as tk
-from tkinter import filedialog, messagebox, simpledialog, ttk
+from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
+                            QLabel, QLineEdit, QPushButton, QComboBox, QTextEdit, 
+                            QTableWidget, QTableWidgetItem, QHeaderView, QFrame, 
+                            QMessageBox, QFileDialog, QSizePolicy)
+from PyQt5.QtCore import Qt, QSize
+from PyQt5.QtGui import QFont, QColor, QPalette, QIcon
 import networkx as nx
-import csv, re
+import sys
+import re
 from gurobi_solver import GurobiSolver
 
-class GraphEditor:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Graph Editor")
+class GraphEditor(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Graph Editor Pro")
+        self.setMinimumSize(1200, 800)
+        
+        # Custom color palette
+        self.colors = {
+            "primary": "#4a6da7",
+            "secondary": "#6c5ce7",
+            "success": "#00b894",
+            "danger": "#d63031",
+            "warning": "#fdcb6e",
+            "dark": "#2d3436",
+            "light": "#dfe6e9",
+            "background": "#1e1e2e",
+            "card": "#2a2a3a",
+            "text": "#ffffff"
+        }
+        
+        # Set dark theme
+        self.set_dark_theme()
+        
         self.graph = nx.Graph()
         self.start_node = None
         self.end_node = None
+        
+        self.init_ui()
+        self.solver = GurobiSolver(self.graph, self.statusBar(), self.result_text, None, None)
+        
+    def set_dark_theme(self):
+        palette = QPalette()
+        palette.setColor(QPalette.Window, QColor(self.colors["background"]))
+        palette.setColor(QPalette.WindowText, QColor(self.colors["text"]))
+        palette.setColor(QPalette.Base, QColor(self.colors["card"]))
+        palette.setColor(QPalette.AlternateBase, QColor(self.colors["dark"]))
+        palette.setColor(QPalette.ToolTipBase, QColor(self.colors["dark"]))
+        palette.setColor(QPalette.ToolTipText, QColor(self.colors["text"]))
+        palette.setColor(QPalette.Text, QColor(self.colors["text"]))
+        palette.setColor(QPalette.Button, QColor(self.colors["primary"]))
+        palette.setColor(QPalette.ButtonText, QColor(self.colors["text"]))
+        palette.setColor(QPalette.BrightText, Qt.red)
+        palette.setColor(QPalette.Highlight, QColor(self.colors["secondary"]))
+        palette.setColor(QPalette.HighlightedText, Qt.white)
+        QApplication.setPalette(palette)
+        
+    def init_ui(self):
+        # Main widget and layout
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        main_layout = QHBoxLayout(central_widget)
+        main_layout.setContentsMargins(20, 20, 20, 20)
+        main_layout.setSpacing(20)
+        
+        # Left sidebar
+        sidebar = QFrame()
+        sidebar.setFrameShape(QFrame.StyledPanel)
+        sidebar.setMinimumWidth(300)
+        sidebar.setMaximumWidth(350)
+        sidebar.setStyleSheet(f"background-color: {self.colors['card']}; border-radius: 10px;")
+        sidebar_layout = QVBoxLayout(sidebar)
+        sidebar_layout.setContentsMargins(15, 15, 15, 15)
+        sidebar_layout.setSpacing(15)
+        
+        # Node operations
+        node_group, node_content = self.create_card("NODE OPERATIONS")
+        self.node_name_widget, self.node_name_entry = self.create_input("Node Name:", placeholder="Enter node name")
+        add_node_btn = self.create_button("Add Node", self.colors["success"], icon="➕", 
+                                action=self.add_node, tooltip="Add a new node to the graph")
+        node_content.layout.addWidget(self.node_name_widget)
+        node_content.layout.addWidget(add_node_btn)
+        
+        # Edge operations
+        edge_group, edge_content = self.create_card("EDGE OPERATIONS")
+        self.edge_nodes_widget, self.edge_nodes_entry = self.create_input("Nodes (A,B):", placeholder="Enter connected nodes")
+        self.edge_weight_widget, self.edge_weight_entry = self.create_input("Weight:", placeholder="Enter edge weight")
+        add_edge_btn = self.create_button("Add Edge", self.colors["primary"], icon="🔗", 
+                                        action=self.add_edge, tooltip="Add a new edge between nodes")
+        edge_content.layout.addWidget(self.edge_nodes_widget)
+        edge_content.layout.addWidget(self.edge_weight_widget)
+        edge_content.layout.addWidget(add_edge_btn)
+        
+        # Add widgets to sidebar
+        sidebar_layout.addWidget(node_group)
+        sidebar_layout.addWidget(edge_group)
+        sidebar_layout.addStretch()
+                
+        # Right content area
+        content = QWidget()
+        content_layout = QVBoxLayout(content)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(15)
+        
+        # Tables area
+        tables_widget = QWidget()
+        tables_layout = QHBoxLayout(tables_widget)
+        tables_layout.setContentsMargins(0, 0, 0, 0)
+        tables_layout.setSpacing(15)
+        
+        # Nodes table
+        nodes_card, nodes_content = self.create_card("NODES")
+        self.nodes_table = self.create_table(["Node"])
+        nodes_content.layout.addWidget(self.nodes_table)
 
-        # Appliquer un thème ttk moderne
-        style = ttk.Style()
-        style.theme_use('clam')
-        style.configure('TLabelFrame', background='#f0f0f0', borderwidth=2)
-        style.configure('TLabel', background='#f0f0f0', font=('Segoe UI', 10))
-        style.configure('TButton', font=('Segoe UI', 10, 'bold'))
-        style.configure('TEntry', font=('Segoe UI', 10))
-        style.configure('TCombobox', font=('Segoe UI', 10))
+        
+        # Edges table
+        edges_card, edges_content = self.create_card("EDGES")
+        self.edges_table = self.create_table(["From", "To", "Weight"])
+        edges_content.layout.addWidget(self.edges_table)
 
-        # Grille responsive
-        self.root.geometry('900x600')
-        for i in range(3): self.root.grid_columnconfigure(i, weight=1)
-        for i in range(7): self.root.grid_rowconfigure(i, weight=0)
-        self.root.grid_rowconfigure(1, weight=1)
-        self.root.grid_rowconfigure(6, weight=1)
+        tables_layout.addWidget(nodes_card)
+        tables_layout.addWidget(edges_card)
+        
+        # Path finding
+        path_card, path_content = self.create_card("SHORTEST PATH")
+        path_layout = QHBoxLayout()
+        path_content.layout.addLayout(path_layout)
 
-        self.create_widgets()
+        self.start_node_combobox = QComboBox()
+        self.start_node_combobox.setPlaceholderText("Start node")
+        self.start_node_combobox.setStyleSheet(self.get_combo_style())
 
-    def create_widgets(self):
-        # Cadre ajout nœud et arête côte-à-côte
-        top_frame = ttk.Frame(self.root)
-        top_frame.grid(row=0, column=0, columnspan=3, sticky='ew', padx=10, pady=5)
-        top_frame.grid_columnconfigure((0,1), weight=1)
+        self.end_node_combobox = QComboBox()
+        self.end_node_combobox.setPlaceholderText("End node")
+        self.end_node_combobox.setStyleSheet(self.get_combo_style())
 
-        # Ajouter nœud
-        node_frame = ttk.LabelFrame(top_frame, text="Ajouter un Nœud", padding=10)
-        node_frame.grid(row=0, column=0, sticky='ew', padx=5)
-        self.node_name_entry = ttk.Entry(node_frame)
-        self.node_name_entry.grid(row=0, column=0, sticky='ew', pady=2)
-        ttk.Button(node_frame, text="Ajouter", command=self.add_node).grid(row=0, column=1, padx=5)
+        solve_btn = self.create_button("Solve", self.colors["secondary"], icon="🚀", 
+                                    action=self.solve_graph, tooltip="Find shortest path")
 
-        # Ajouter arête
-        edge_frame = ttk.LabelFrame(top_frame, text="Ajouter une Arête", padding=10)
-        edge_frame.grid(row=0, column=1, sticky='ew', padx=5)
-        self.edge_nodes_entry = ttk.Entry(edge_frame)
-        self.edge_nodes_entry.grid(row=0, column=0, sticky='ew', pady=2)
-        self.edge_weight_entry = ttk.Entry(edge_frame, width=8)
-        self.edge_weight_entry.grid(row=0, column=1, sticky='ew', pady=2)
-        ttk.Button(edge_frame, text="Ajouter", command=self.add_edge).grid(row=0, column=2, padx=5)
-
-        # Listes nœuds / arêtes
-        list_frame = ttk.Frame(self.root)
-        list_frame.grid(row=1, column=0, columnspan=3, sticky='nsew', padx=10, pady=5)
-        list_frame.grid_columnconfigure((0,1), weight=1)
-        list_frame.grid_rowconfigure(0, weight=1)
-
-        # Nœuds
-        ttk.Label(list_frame, text="Nœuds").grid(row=0, column=0)
-        self.nodes_listbox = tk.Listbox(list_frame, height=8)
-        self.nodes_listbox.grid(row=1, column=0, sticky='nsew', padx=5)
-
-        # Arêtes
-        ttk.Label(list_frame, text="Arêtes").grid(row=0, column=1)
-        self.edges_listbox = tk.Listbox(list_frame, height=8)
-        self.edges_listbox.grid(row=1, column=1, sticky='nsew', padx=5)
-
-        # Sélection départ/arrivée
-        select_frame = ttk.LabelFrame(self.root, text="Plus Court Chemin", padding=10)
-        select_frame.grid(row=2, column=0, columnspan=3, sticky='ew', padx=10, pady=5)
-        select_frame.grid_columnconfigure((0,1,2), weight=1)
-        self.start_node_combobox = ttk.Combobox(select_frame, state='readonly')
-        self.start_node_combobox.set('Départ')
-        self.start_node_combobox.grid(row=0, column=0, padx=5)
-        self.end_node_combobox = ttk.Combobox(select_frame, state='readonly')
-        self.end_node_combobox.set('Arrivée')
-        self.end_node_combobox.grid(row=0, column=1, padx=5)
-        ttk.Button(select_frame, text="Résoudre", command=self.solve_graph).grid(row=0, column=2, padx=5)
-
-        # Erreur et résultat
-        self.error_label = ttk.Label(self.root, text='', foreground='red')
-        self.error_label.grid(row=3, column=0, columnspan=3)
-        self.result_text = tk.Text(self.root, height=6, wrap=tk.WORD, state='disabled', font=('Segoe UI', 10))
-        self.result_text.grid(row=4, column=0, columnspan=3, sticky='ew', padx=10, pady=5)
-
-        # Boutons Load/Save/Modify/Delete
-        btns = ['Charger', 'Sauvegarder', 'Modifier Nœud', 'Supprimer Nœud', 'Modifier Arête', 'Supprimer Arête']
-        cmds = [self.load_graph, self.save_graph, self.modify_node, self.delete_node, self.modify_edge, self.delete_edge]
-        for i, (t,c) in enumerate(zip(btns, cmds)):
-            ttk.Button(self.root, text=t, command=c).grid(row=5 + i//3, column=i%3, sticky='ew', padx=10, pady=5)
-
-        # Init solver
-        self.solver = GurobiSolver(self.graph, self.error_label, self.result_text, self.start_node, self.end_node)
-
+        path_layout.addWidget(self.start_node_combobox)
+        path_layout.addWidget(self.end_node_combobox)
+        path_layout.addWidget(solve_btn)
+        
+        # Results area
+        result_card, result_content = self.create_card("RESULTS")
+        self.result_text = QTextEdit()
+        self.result_text.setReadOnly(True)
+        self.result_text.setStyleSheet(f"""
+            QTextEdit {{
+                background-color: {self.colors['card']};
+                color: {self.colors['text']};
+                border: 1px solid {self.colors['dark']};
+                border-radius: 5px;
+                padding: 10px;
+                font-family: 'Consolas';
+            }}
+        """)
+        result_content.layout.addWidget(self.result_text)
+        
+        # Add widgets to content area
+        content_layout.addWidget(tables_widget)
+        content_layout.addWidget(path_card)
+        content_layout.addWidget(result_card)
+        
+        # Add sidebar and content to main layout
+        main_layout.addWidget(sidebar)
+        main_layout.addWidget(content)
+        
+        # Status bar
+        self.statusBar().setStyleSheet(f"""
+            QStatusBar {{
+                background-color: {self.colors['dark']};
+                color: {self.colors['text']};
+                border-top: 1px solid {self.colors['card']};
+            }}
+        """)
+        
+    def create_card(self, title):
+        card = QFrame()
+        card.setFrameShape(QFrame.StyledPanel)
+        card.setStyleSheet(f"""
+            QFrame {{
+                background-color: {self.colors['card']};
+                border-radius: 10px;
+            }}
+        """)
+        
+        # Main layout for the card
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(15, 15, 15, 15)
+        card_layout.setSpacing(10)
+        
+        # Title label
+        title_label = QLabel(title)
+        title_label.setStyleSheet(f"""
+            QLabel {{
+                color: {self.colors['primary']};
+                font-weight: bold;
+                font-size: 14px;
+            }}
+        """)
+        card_layout.addWidget(title_label)
+        
+        # Create a container widget for the card content
+        content_widget = QWidget()
+        card_layout.addWidget(content_widget)
+        
+        # Store the content layout as an attribute
+        content_widget.layout = QVBoxLayout(content_widget)
+        content_widget.layout.setContentsMargins(0, 0, 0, 0)
+        content_widget.layout.setSpacing(10)
+        
+        return card, content_widget
+    def create_input(self, label_text, placeholder=""):
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(0, 0, 0, 0)
+        
+        label = QLabel(label_text)
+        label.setStyleSheet(f"color: {self.colors['text']};")
+        
+        entry = QLineEdit()
+        entry.setPlaceholderText(placeholder)
+        entry.setStyleSheet(f"""
+            QLineEdit {{
+                background-color: {self.colors['card']};
+                color: {self.colors['text']};
+                border: 1px solid {self.colors['dark']};
+                border-radius: 5px;
+                padding: 8px;
+            }}
+        """)
+        
+        layout.addWidget(label)
+        layout.addWidget(entry)
+        
+        # Store the entry as an attribute of the widget
+        widget.entry = entry
+        return widget, entry
+    def create_button(self, text, color, icon="", action=None, tooltip=""):
+        btn = QPushButton(f"{icon} {text}" if icon else text)
+        btn.setCursor(Qt.PointingHandCursor)
+        btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {color};
+                color: white;
+                border: none;
+                border-radius: 5px;
+                padding: 10px;
+                font-weight: bold;
+                min-width: 100px;
+            }}
+            QPushButton:hover {{
+                background-color: {self.darken_color(color, 10)};
+            }}
+            QPushButton:pressed {{
+                background-color: {self.darken_color(color, 20)};
+            }}
+        """)
+        
+        if action:
+            btn.clicked.connect(action)
+        if tooltip:
+            btn.setToolTip(tooltip)
+            
+        return btn
+    
+    def create_table(self, headers):
+        table = QTableWidget()
+        table.setColumnCount(len(headers))
+        table.setHorizontalHeaderLabels(headers)
+        table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        table.verticalHeader().setVisible(False)
+        table.setEditTriggers(QTableWidget.NoEditTriggers)
+        table.setSelectionBehavior(QTableWidget.SelectRows)
+        table.setStyleSheet(f"""
+            QTableWidget {{
+                background-color: {self.colors['card']};
+                color: {self.colors['text']};
+                border: 1px solid {self.colors['dark']};
+                border-radius: 5px;
+                gridline-color: {self.colors['dark']};
+            }}
+            QHeaderView::section {{
+                background-color: {self.colors['dark']};
+                color: {self.colors['text']};
+                padding: 5px;
+                border: none;
+            }}
+        """)
+        return table
+    
+    def get_combo_style(self):
+        return f"""
+            QComboBox {{
+                background-color: {self.colors['card']};
+                color: {self.colors['text']};
+                border: 1px solid {self.colors['dark']};
+                border-radius: 5px;
+                padding: 8px;
+                min-width: 100px;
+            }}
+            QComboBox::drop-down {{
+                border: none;
+            }}
+            QComboBox QAbstractItemView {{
+                background-color: {self.colors['card']};
+                color: {self.colors['text']};
+                selection-background-color: {self.colors['primary']};
+            }}
+        """
+    
+    def darken_color(self, hex_color, percent):
+        """Darken a hex color by a percentage"""
+        rgb = tuple(int(hex_color.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
+        darkened = tuple(max(0, int(c * (100 - percent) / 100)) for c in rgb)
+        return '#%02x%02x%02x' % darkened
+    
+    # ===== Core Functionality (unchanged from original) =====
     def validate_node_name(self, node_name):
         return bool(node_name and re.match(r'^[a-zA-Z0-9_-]+$', node_name))
 
@@ -105,136 +328,108 @@ class GraphEditor:
             return False
 
     def add_node(self):
-        node_name = self.node_name_entry.get()
+        node_name = self.node_name_entry.text()
         if self.validate_node_name(node_name):
             if node_name not in self.graph:
                 self.graph.add_node(node_name)
                 self.update_node_list()
-                self.node_name_entry.delete(0, tk.END)
-                self.display_error("")
+                self.node_name_entry.clear()
+                self.show_status("Node added successfully", False)
             else:
-                self.display_error("Le nœud existe déjà.")
+                self.show_status("Node already exists")
         else:
-            self.display_error("Nom de nœud invalide. Utilisez seulement des lettres, chiffres, tirets et underscores.")
+            self.show_status("Invalid node name. Use only letters, numbers, hyphens and underscores.")
 
     def add_edge(self):
-        edge_input = self.edge_nodes_entry.get()
-        weight_input = self.edge_weight_entry.get()
+        edge_input = self.edge_nodes_entry.text()
+        weight_input = self.edge_weight_entry.text()
         if edge_input and weight_input:
-            nodes = edge_input.split(',')
+            nodes = [n.strip() for n in edge_input.split(',')]
             if len(nodes) == 2 and nodes[0] in self.graph and nodes[1] in self.graph:
                 if self.validate_edge_weight(weight_input):
                     weight = float(weight_input)
                     self.graph.add_edge(nodes[0], nodes[1], weight=weight)
                     self.update_edge_list()
-                    self.edge_nodes_entry.delete(0, tk.END)
-                    self.edge_weight_entry.delete(0, tk.END)
-                    self.display_error("")
+                    self.edge_nodes_entry.clear()
+                    self.edge_weight_entry.clear()
+                    self.show_status("Edge added successfully", False)
                 else:
-                    self.display_error("Le poids doit être un nombre valide et positif.")
+                    self.show_status("Weight must be a positive number")
             else:
-                self.display_error("Les nœuds doivent exister dans le graphe.")
+                self.show_status("Both nodes must exist in the graph")
         else:
-            self.display_error("Veuillez remplir tous les champs.")
-
-    def modify_node(self):
-        sel = self.nodes_listbox.curselection()
-        if sel:
-            node = self.nodes_listbox.get(sel)
-            new_name = simpledialog.askstring("Modifier Nœud", f"Nouveau nom pour '{node}':")
-            if new_name and new_name != node and self.validate_node_name(new_name):
-                nx.relabel_nodes(self.graph, {node: new_name}, copy=False)
-                self.update_node_list()
-                self.display_error("")
-            else:
-                self.display_error("Nom invalide ou identique.")
-        else:
-            self.display_error("Sélectionnez un nœud à modifier.")
-
-    def modify_edge(self):
-        sel = self.edges_listbox.curselection()
-        if sel:
-            data = self.edges_listbox.get(sel)
-            nodes, weight = data.split(" : ")
-            u,v = nodes.split(" - ")
-            new_w = simpledialog.askfloat("Modifier Arête", f"Nouveau poids pour {u}-{v}:", minvalue=0)
-            if new_w is not None:
-                self.graph[u][v]['weight'] = new_w
-                self.update_edge_list()
-                self.display_error("")
-        else:
-            self.display_error("Sélectionnez une arête à modifier.")
-
-    def delete_node(self):
-        sel = self.nodes_listbox.curselection()
-        if sel:
-            node = self.nodes_listbox.get(sel)
-            self.graph.remove_node(node)
-            self.update_node_list()
-            self.update_edge_list()
-            self.display_error("")
-        else:
-            self.display_error("Sélectionnez un nœud à supprimer.")
-
-    def delete_edge(self):
-        sel = self.edges_listbox.curselection()
-        if sel:
-            data = self.edges_listbox.get(sel)
-            nodes, _ = data.split(" : ")
-            u,v = nodes.split(" - ")
-            self.graph.remove_edge(u, v)
-            self.update_edge_list()
-            self.display_error("")
-        else:
-            self.display_error("Sélectionnez une arête à supprimer.")
+            self.show_status("Please fill all fields")
 
     def update_node_list(self):
-        self.nodes_listbox.delete(0, tk.END)
-        for n in self.graph.nodes:
-            self.nodes_listbox.insert(tk.END, n)
-        vals = list(self.graph.nodes)
-        self.start_node_combobox.configure(values=vals)
-        self.end_node_combobox.configure(values=vals)
+        self.nodes_table.setRowCount(0)
+        for node in self.graph.nodes:
+            row = self.nodes_table.rowCount()
+            self.nodes_table.insertRow(row)
+            self.nodes_table.setItem(row, 0, QTableWidgetItem(node))
+        
+        nodes = list(self.graph.nodes)
+        self.start_node_combobox.clear()
+        self.end_node_combobox.clear()
+        self.start_node_combobox.addItems(nodes)
+        self.end_node_combobox.addItems(nodes)
 
     def update_edge_list(self):
-        self.edges_listbox.delete(0, tk.END)
-        for u,v,d in self.graph.edges(data=True):
-            self.edges_listbox.insert(tk.END, f"{u} - {v} : {d['weight']}")
+        self.edges_table.setRowCount(0)
+        for u, v, d in self.graph.edges(data=True):
+            row = self.edges_table.rowCount()
+            self.edges_table.insertRow(row)
+            self.edges_table.setItem(row, 0, QTableWidgetItem(u))
+            self.edges_table.setItem(row, 1, QTableWidgetItem(v))
+            self.edges_table.setItem(row, 2, QTableWidgetItem(str(d["weight"])))
+
+    def show_status(self, message, is_error=True):
+        self.statusBar().showMessage(message)
+        if is_error:
+            self.statusBar().setStyleSheet(f"color: {self.colors['danger']};")
+        else:
+            self.statusBar().setStyleSheet(f"color: {self.colors['success']};")
 
     def solve_graph(self):
-        start = self.start_node_combobox.get()
-        end = self.end_node_combobox.get()
+        start = self.start_node_combobox.currentText()
+        end = self.end_node_combobox.currentText()
         if start in self.graph and end in self.graph:
-            self.start_node, self.end_node = start, end
+            self.start_node = start
+            self.end_node = end
             self.solver.start_node = start
             self.solver.end_node = end
             self.solver.solve()
         else:
-            self.display_error("Sélectionnez un départ et une arrivée valides.")
+            self.show_status("Please select valid start and end nodes")
 
     def load_graph(self):
-        path = filedialog.askopenfilename(filetypes=[("CSV", "*.csv")])
+        path, _ = QFileDialog.getOpenFileName(self, "Open Graph", "", "CSV Files (*.csv)")
         if path:
             with open(path) as f:
                 reader = csv.reader(f)
                 for row in reader:
-                    if len(row)==1: self.graph.add_node(row[0])
-                    elif len(row)==3: self.graph.add_edge(row[0], row[1], weight=float(row[2]))
+                    if len(row)==1: 
+                        self.graph.add_node(row[0])
+                    elif len(row)==3: 
+                        self.graph.add_edge(row[0], row[1], weight=float(row[2]))
             self.update_node_list()
             self.update_edge_list()
+            self.show_status("Graph loaded successfully", False)
 
     def save_graph(self):
-        path = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("CSV","*.csv")])
+        path, _ = QFileDialog.getSaveFileName(self, "Save Graph", "", "CSV Files (*.csv)")
         if path:
             with open(path, 'w', newline='') as f:
                 writer = csv.writer(f)
-                for n in self.graph.nodes: writer.writerow([n])
-                for u,v,d in self.graph.edges(data=True): writer.writerow([u,v,d['weight']])
-
-    def display_error(self, message):
-        self.error_label.config(text=message)
+                for n in self.graph.nodes: 
+                    writer.writerow([n])
+                for u, v, d in self.graph.edges(data=True): 
+                    writer.writerow([u, v, d['weight']])
+            self.show_status("Graph saved successfully", False)
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    app = GraphEditor(root)
-    root.mainloop()
+    app = QApplication(sys.argv)
+    font = QFont("Segoe UI", 10)
+    app.setFont(font)
+    window = GraphEditor()
+    window.show()
+    sys.exit(app.exec_())
