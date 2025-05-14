@@ -7,7 +7,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont, QPalette, QColor
 import csv
-from .resource_solver import ResourceSolver
+from resource_solver import ResourceSolver
 
 class ResourceAllocator(QMainWindow):
     def __init__(self, home_window=None):
@@ -93,13 +93,13 @@ class ResourceAllocator(QMainWindow):
         main_layout.setSpacing(10)
         
         top_bar = QWidget()
-        top_bar.setFixedHeight(80)
+        top_bar.setFixedHeight(50)
         top_bar.setStyleSheet(f"background-color: {self.colors['dark']};")
         top_layout = QHBoxLayout(top_bar)
         top_layout.setContentsMargins(10, 0, 10, 0)
 
         self.return_btn = self.create_button("← Return to Home", self.colors["primary"])
-        self.return_btn.setFixedSize(180, 50)
+        self.return_btn.setFixedSize(180, 35)
         self.return_btn.clicked.connect(self.return_to_home)
         top_layout.addStretch()
         top_layout.addWidget(self.return_btn)
