@@ -7,11 +7,12 @@ from PyQt5.QtGui import QFont, QColor, QPalette, QIcon
 import networkx as nx
 import sys
 import re
-from gurobi_solver import GurobiSolver
+from .gurobi_solver import GurobiSolver
 
 class GraphEditor(QMainWindow):
-    def __init__(self):
+    def __init__(self, home_window=None):
         super().__init__()
+        self.home_window = home_window 
         self.setWindowTitle("Graph Editor Pro")
         self.setMinimumSize(1200, 800)
         
@@ -35,35 +36,46 @@ class GraphEditor(QMainWindow):
         self.graph = nx.Graph()
         self.start_node = None
         self.end_node = None
+        # self.init_return_button()
         
         self.init_ui()
         self.solver = GurobiSolver(self.graph, self.statusBar(), self.result_text, None, None)
-        
-    def set_dark_theme(self):
-        palette = QPalette()
-        palette.setColor(QPalette.Window, QColor(self.colors["background"]))
-        palette.setColor(QPalette.WindowText, QColor(self.colors["text"]))
-        palette.setColor(QPalette.Base, QColor(self.colors["card"]))
-        palette.setColor(QPalette.AlternateBase, QColor(self.colors["dark"]))
-        palette.setColor(QPalette.ToolTipBase, QColor(self.colors["dark"]))
-        palette.setColor(QPalette.ToolTipText, QColor(self.colors["text"]))
-        palette.setColor(QPalette.Text, QColor(self.colors["text"]))
-        palette.setColor(QPalette.Button, QColor(self.colors["primary"]))
-        palette.setColor(QPalette.ButtonText, QColor(self.colors["text"]))
-        palette.setColor(QPalette.BrightText, Qt.red)
-        palette.setColor(QPalette.Highlight, QColor(self.colors["secondary"]))
-        palette.setColor(QPalette.HighlightedText, Qt.white)
-        QApplication.setPalette(palette)
-        
+    
+    def return_to_home(self):
+        """Return to home screen"""
+        self.close()
+        if hasattr(self, 'home_window') and self.home_window:
+            self.home_window.show()
+            self.home_window.activateWindow()
     def init_ui(self):
         # Main widget and layout
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
-        main_layout = QHBoxLayout(central_widget)
+        main_vertical_layout = QVBoxLayout(central_widget)
+        main_vertical_layout.setContentsMargins(0, 0, 0, 0)
+        main_vertical_layout.setSpacing(0)
+
+
+        content_area=QWidget()
+        main_layout = QHBoxLayout(content_area)
         main_layout.setContentsMargins(20, 20, 20, 20)
         main_layout.setSpacing(20)
+
+        top_bar = QWidget()
+        top_bar.setFixedHeight(50)
+        top_bar.setStyleSheet(f"background-color: {self.colors['dark']};")
+        top_layout = QHBoxLayout(top_bar)
+        top_layout.setContentsMargins(10, 0, 10, 0)
+
+        self.return_btn = self.create_button("← Return to Home", self.colors["primary"])
+        self.return_btn.clicked.connect(self.return_to_home)
+        self.return_btn.setFixedSize(180, 50)
+        top_layout.addStretch()
+        top_layout.addWidget(self.return_btn)
         
-        # Left sidebar
+        main_vertical_layout.addWidget(top_bar)
+        
+        
         sidebar = QFrame()
         sidebar.setFrameShape(QFrame.StyledPanel)
         sidebar.setMinimumWidth(300)
@@ -166,7 +178,7 @@ class GraphEditor(QMainWindow):
         # Add sidebar and content to main layout
         main_layout.addWidget(sidebar)
         main_layout.addWidget(content)
-        
+        main_vertical_layout.addWidget(content_area)
         # Status bar
         self.statusBar().setStyleSheet(f"""
             QStatusBar {{
@@ -264,8 +276,7 @@ class GraphEditor(QMainWindow):
         if tooltip:
             btn.setToolTip(tooltip)
             
-        return btn
-    
+        return btn 
     def create_table(self, headers):
         table = QTableWidget()
         table.setColumnCount(len(headers))
@@ -316,7 +327,21 @@ class GraphEditor(QMainWindow):
         rgb = tuple(int(hex_color.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
         darkened = tuple(max(0, int(c * (100 - percent) / 100)) for c in rgb)
         return '#%02x%02x%02x' % darkened
-    
+    def set_dark_theme(self):
+        palette = QPalette()
+        palette.setColor(QPalette.Window, QColor(self.colors["background"]))
+        palette.setColor(QPalette.WindowText, QColor(self.colors["text"]))
+        palette.setColor(QPalette.Base, QColor(self.colors["card"]))
+        palette.setColor(QPalette.AlternateBase, QColor(self.colors["dark"]))
+        palette.setColor(QPalette.ToolTipBase, QColor(self.colors["dark"]))
+        palette.setColor(QPalette.ToolTipText, QColor(self.colors["text"]))
+        palette.setColor(QPalette.Text, QColor(self.colors["text"]))
+        palette.setColor(QPalette.Button, QColor(self.colors["primary"]))
+        palette.setColor(QPalette.ButtonText, QColor(self.colors["text"]))
+        palette.setColor(QPalette.BrightText, Qt.red)
+        palette.setColor(QPalette.Highlight, QColor(self.colors["secondary"]))
+        palette.setColor(QPalette.HighlightedText, Qt.white)
+        QApplication.setPalette(palette)
     # ===== Core Functionality (unchanged from original) =====
     def validate_node_name(self, node_name):
         return bool(node_name and re.match(r'^[a-zA-Z0-9_-]+$', node_name))
