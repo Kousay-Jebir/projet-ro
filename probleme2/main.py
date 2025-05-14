@@ -1,262 +1,428 @@
-import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
+import sys
+from PyQt5.QtWidgets import (
+    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
+    QLineEdit, QTextEdit, QTableWidget, QTableWidgetItem, QFileDialog,
+    QMessageBox, QHeaderView, QFrame, QSizePolicy, QScrollArea
+)
+from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QFont, QPalette, QColor
 import csv
 from resource_solver import ResourceSolver
 
-class ResourceAllocator:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Resource Allocation Minimizer")
-        self.costs = []
-        self.constraints = []  # Each constraint: (a_ij list, b_j)
 
-        # GUI Styling
-        style = ttk.Style()
-        style.theme_use('clam')
-        style.configure('TFrame', background='#f0f0f0')
-        style.configure('TLabel', background='#f0f0f0', font=('Segoe UI', 10))
-        style.configure('TButton', font=('Segoe UI', 10, 'bold'))
-        style.configure('Error.TLabel', foreground='red', background='#f0f0f0', font=('Segoe UI', 10, 'bold'))
-        style.configure('Success.TLabel', foreground='green', background='#f0f0f0', font=('Segoe UI', 10))
-
-        # Layout
-        self.root.geometry('800x650')
-        for i in range(3): self.root.grid_columnconfigure(i, weight=1)
-        self.root.grid_rowconfigure(1, weight=1)
-
-        self.create_widgets()
-
-    def create_widgets(self):
-        # Cost Input
-        cost_frame = ttk.LabelFrame(self.root, text="Activity Costs", padding=10)
-        cost_frame.grid(row=0, column=0, padx=10, pady=5, sticky='ew')
-        self.cost_entry = ttk.Entry(cost_frame)
-        self.cost_entry.grid(row=0, column=0, padx=5, sticky='ew')
-        ttk.Button(cost_frame, text="Add Cost", command=self.add_cost).grid(row=0, column=1, padx=5)
-        ttk.Button(cost_frame, text="Remove Last", command=self.remove_last_cost).grid(row=0, column=2, padx=5)
-
-        # Constraint Input
-        constraint_frame = ttk.LabelFrame(self.root, text="Constraints (a_ij, b_j)", padding=10)
-        constraint_frame.grid(row=0, column=1, padx=10, pady=5, sticky='ew')
-        self.a_ij_entry = ttk.Entry(constraint_frame, width=20)
-        self.a_ij_entry.grid(row=0, column=0, padx=5)
-        self.b_j_entry = ttk.Entry(constraint_frame, width=8)
-        self.b_j_entry.grid(row=0, column=1, padx=5)
-        ttk.Button(constraint_frame, text="Add Constraint", command=self.add_constraint).grid(row=0, column=2, padx=5)
-        ttk.Button(constraint_frame, text="Remove Last", command=self.remove_last_constraint).grid(row=0, column=3, padx=5)
-
-        # Demand Constraint
-        demand_frame = ttk.LabelFrame(self.root, text="Minimum Total Demand", padding=10)
-        demand_frame.grid(row=0, column=2, padx=10, pady=5, sticky='ew')
-        self.demand_entry = ttk.Entry(demand_frame, width=8)
-        self.demand_entry.grid(row=0, column=0, padx=5, sticky='ew')
-        self.demand_entry.insert(0, "5.0")  # Default value
-
-        # Lists
-        list_frame = ttk.Frame(self.root)
-        list_frame.grid(row=1, column=0, columnspan=3, sticky='nsew', padx=10, pady=5)
-        list_frame.grid_columnconfigure(0, weight=1)
-        list_frame.grid_columnconfigure(1, weight=1)
-        list_frame.grid_rowconfigure(1, weight=1)
-        
-        ttk.Label(list_frame, text="Costs (c_i)").grid(row=0, column=0)
-        self.costs_listbox = tk.Listbox(list_frame, width=20, height=10)
-        self.costs_listbox.grid(row=1, column=0, sticky='nsew', padx=5)
-        costs_scrollbar = ttk.Scrollbar(list_frame, orient="vertical", command=self.costs_listbox.yview)
-        costs_scrollbar.grid(row=1, column=0, sticky='nse')
-        self.costs_listbox.configure(yscrollcommand=costs_scrollbar.set)
-
-        ttk.Label(list_frame, text="Constraints (Sum(a_ij * x_i) <= b_j)").grid(row=0, column=1)
-        self.constraints_listbox = tk.Listbox(list_frame, width=40, height=10)
-        self.constraints_listbox.grid(row=1, column=1, sticky='nsew', padx=5)
-        constraints_scrollbar = ttk.Scrollbar(list_frame, orient="vertical", command=self.constraints_listbox.yview)
-        constraints_scrollbar.grid(row=1, column=1, sticky='nse')
-        self.constraints_listbox.configure(yscrollcommand=constraints_scrollbar.set)
-
-        # Control buttons
-        button_frame = ttk.Frame(self.root)
-        button_frame.grid(row=2, column=0, columnspan=3, pady=10)
-        ttk.Button(button_frame, text="Solve", command=self.solve).grid(row=0, column=0, padx=10)
-        ttk.Button(button_frame, text="Clear All", command=self.clear_all).grid(row=0, column=1, padx=10)
-        ttk.Button(button_frame, text="Load Data", command=self.load_data).grid(row=0, column=2, padx=10)
-        ttk.Button(button_frame, text="Save Data", command=self.save_data).grid(row=0, column=3, padx=10)
-
-        # Status and Results
-        self.error_label = ttk.Label(self.root, text="", style='Error.TLabel')
-        self.error_label.grid(row=3, column=0, columnspan=3, pady=5)
-        
-        result_frame = ttk.LabelFrame(self.root, text="Solution Results", padding=10)
-        result_frame.grid(row=4, column=0, columnspan=3, sticky='nsew', padx=10, pady=5)
-        result_frame.grid_columnconfigure(0, weight=1)
-        result_frame.grid_rowconfigure(0, weight=1)
-        
-        self.result_text = tk.Text(result_frame, height=10, wrap=tk.WORD, state='disabled')
-        self.result_text.grid(row=0, column=0, sticky='nsew')
-        result_scrollbar = ttk.Scrollbar(result_frame, orient="vertical", command=self.result_text.yview)
-        result_scrollbar.grid(row=0, column=0, sticky='nse')
-        self.result_text.configure(yscrollcommand=result_scrollbar.set)
-
-    def add_cost(self):
-        try:
-            cost = float(self.cost_entry.get())
-            self.costs.append(cost)
-            self.costs_listbox.insert(tk.END, f"c_{len(self.costs)-1}: {cost:.2f}")
-            self.cost_entry.delete(0, tk.END)
-            self.error_label.config(text="")
-        except ValueError:
-            self.error_label.config(text="Invalid cost value. Please enter a number.")
-
-    def remove_last_cost(self):
-        if self.costs:
-            self.costs.pop()
-            self.costs_listbox.delete(tk.END)
-            self.error_label.config(text="")
-        else:
-            self.error_label.config(text="No costs to remove.")
-
-    def add_constraint(self):
-        try:
-            a_ij_text = self.a_ij_entry.get().strip()
-            
-            # Support different input formats (comma-separated or space-separated)
-            if ',' in a_ij_text:
-                a_ij = [float(x.strip()) for x in a_ij_text.split(',')]
-            else:
-                a_ij = [float(x) for x in a_ij_text.split()]
-                
-            b_j = float(self.b_j_entry.get())
-            
-            if not self.costs:
-                self.error_label.config(text="Add costs first before adding constraints.")
-                return
-                
-            if len(a_ij) != len(self.costs):
-                self.error_label.config(text=f"Expected {len(self.costs)} a_ij values, got {len(a_ij)}.")
-                return
-                
-            self.constraints.append((a_ij, b_j))
-            self.constraints_listbox.insert(tk.END, f"{a_ij} <= {b_j:.2f}")
-            self.a_ij_entry.delete(0, tk.END)
-            self.b_j_entry.delete(0, tk.END)
-            self.error_label.config(text="")
-        except ValueError:
-            self.error_label.config(text="Invalid constraint values. Check format and try again.")
-
-    def remove_last_constraint(self):
-        if self.constraints:
-            self.constraints.pop()
-            self.constraints_listbox.delete(tk.END)
-            self.error_label.config(text="")
-        else:
-            self.error_label.config(text="No constraints to remove.")
-
-    def solve(self):
-        if not self.costs:
-            self.error_label.config(text="Add costs before solving.")
-            return
-            
-        if not self.constraints:
-            self.error_label.config(text="Add at least one constraint before solving.")
-            return
-        
-        try:
-            demand = float(self.demand_entry.get()) if self.demand_entry.get().strip() else None
-            
-            # Validate demand is positive if provided
-            if demand is not None and demand <= 0:
-                self.error_label.config(text="Demand must be greater than zero.")
-                return
-                
-            solver = ResourceSolver(self.costs, self.constraints, self.error_label, self.result_text, demand)
-            solver.solve()
-        except ValueError:
-            self.error_label.config(text="Invalid demand value. Please enter a number.")
-
-    def clear_all(self):
+class ResourceAllocator(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("📊 Resource Allocation Minimizer")
+        self.setMinimumSize(1200, 800)
         self.costs = []
         self.constraints = []
-        self.costs_listbox.delete(0, tk.END)
-        self.constraints_listbox.delete(0, tk.END)
-        self.error_label.config(text="")
-        self.result_text.config(state=tk.NORMAL)
-        self.result_text.delete(1.0, tk.END)
-        self.result_text.config(state=tk.DISABLED)
+        
+        # Modern color palette
+        self.colors = {
+            "primary": "#4a6da7",
+            "secondary": "#6c5ce7",
+            "success": "#00b894",
+            "danger": "#d63031",
+            "warning": "#fdcb6e",
+            "dark": "#2d3436",
+            "light": "#dfe6e9",
+            "background": "#1e1e2e",
+            "card": "#2a2a3a",
+            "text": "#ffffff"
+        }
+        
+        self.set_dark_theme()
+        self.init_ui()
 
-    def load_data(self):
-        path = filedialog.askopenfilename(filetypes=[("CSV", "*.csv"), ("All Files", "*.*")])
-        if not path:
-            return
+    def set_dark_theme(self):
+        palette = QPalette()
+        palette.setColor(QPalette.Window, QColor(self.colors["background"]))
+        palette.setColor(QPalette.WindowText, QColor(self.colors["text"]))
+        palette.setColor(QPalette.Base, QColor(self.colors["card"]))
+        palette.setColor(QPalette.AlternateBase, QColor(self.colors["dark"]))
+        palette.setColor(QPalette.ToolTipBase, QColor(self.colors["dark"]))
+        palette.setColor(QPalette.ToolTipText, QColor(self.colors["text"]))
+        palette.setColor(QPalette.Text, QColor(self.colors["text"]))
+        palette.setColor(QPalette.Button, QColor(self.colors["primary"]))
+        palette.setColor(QPalette.ButtonText, QColor(self.colors["text"]))
+        palette.setColor(QPalette.BrightText, Qt.red)
+        palette.setColor(QPalette.Highlight, QColor(self.colors["secondary"]))
+        palette.setColor(QPalette.HighlightedText, Qt.white)
+        QApplication.setPalette(palette)
+
+    def init_ui(self):
+        # Main layout with sidebar and content area
+        main_layout = QHBoxLayout(self)
+        main_layout.setContentsMargins(10, 10, 10, 10)
+        main_layout.setSpacing(10)
+        
+        # Left sidebar (operations)
+        sidebar = QWidget()
+        sidebar.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
+        sidebar_layout = QVBoxLayout(sidebar)
+        sidebar_layout.setContentsMargins(0, 0, 0, 0)
+        sidebar_layout.setSpacing(10)
+        
+        # Right content area (tables and results)
+        content = QWidget()
+        content.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        content_layout = QVBoxLayout(content)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(10)
+        
+        # Set fixed ratio (1:3)
+        main_layout.addWidget(sidebar, stretch=1)  # Sidebar gets 1 part
+        main_layout.addWidget(content, stretch=2)  # Content gets 3 parts
+        
+        # 1. ADD COST section in sidebar
+        cost_card = self.create_card("💰 ADD COST")
+        self.cost_input = self.create_input("Cost:", placeholder="Enter cost value")
+        add_cost_btn = self.create_button("➕ Add Cost", self.colors["success"], 
+                                        action=self.add_cost, tooltip="Add a cost value")
+        cost_card.layout().addWidget(self.cost_input)
+        cost_card.layout().addWidget(add_cost_btn)
+        
+        # 2. ADD CONSTRAINTS section in sidebar
+        constraint_card = self.create_card("🔗 ADD CONSTRAINTS")
+        self.a_ij_input = self.create_input("a_ij:", placeholder="Comma separated values")
+        self.b_j_input = self.create_input("b_j:", placeholder="Constraint value")
+        add_constraint_btn = self.create_button("➕ Add Constraint", self.colors["success"], 
+                                            action=self.add_constraint, tooltip="Add a constraint")
+        constraint_card.layout().addWidget(self.a_ij_input)
+        constraint_card.layout().addWidget(self.b_j_input)
+        constraint_card.layout().addWidget(add_constraint_btn)
+        
+        # 3. LOAD CSV section in sidebar
+        file_card = self.create_card("📂 FILE OPERATIONS")
+        load_csv_btn = self.create_button("📂 Load CSV", self.colors["primary"], 
+                                        action=self.load_all_data, tooltip="Load data from CSV")
+        save_csv_btn = self.create_button("💾 Save CSV", self.colors["primary"], 
+                                        action=self.save_all_data, tooltip="Save data to CSV")
+        file_card.layout().addWidget(load_csv_btn)
+        file_card.layout().addWidget(save_csv_btn)
+        
+        # 4. SOLVE/CLEAR section in sidebar
+        action_card = self.create_card("⚡ ACTIONS")
+        self.demand_input = self.create_input("Min Demand:", initial_value="5.0")
+        solve_btn = self.create_button("🚀 Solve", self.colors["secondary"], 
+                                    action=self.solve, tooltip="Solve the optimization problem")
+        clear_btn = self.create_button("🧹 Clear All", self.colors["danger"], 
+                                    action=self.clear_all, tooltip="Clear all inputs")
+        action_card.layout().addWidget(self.demand_input)
+        action_card.layout().addWidget(solve_btn)
+        action_card.layout().addWidget(clear_btn)
+        
+        # Add all sidebar cards with stretch factors
+        sidebar_layout.addWidget(cost_card)
+        sidebar_layout.addWidget(constraint_card)
+        sidebar_layout.addWidget(file_card)
+        sidebar_layout.addWidget(action_card)
+          # Push all cards to the top
+        
+        # CONTENT AREA COMPONENTS
+        # 1. COSTS TABLE
+        cost_table_card = self.create_card("📝 COSTS TABLE")
+        self.cost_table = self.create_table(["Costs"], rows=1)
+        cost_table_card.layout().addWidget(self.cost_table)
+        
+        # 2. CONSTRAINTS TABLE
+        constraint_table_card = self.create_card("📋 CONSTRAINTS TABLE")
+        self.constraint_table = self.create_table(["a_0", "a_1", "...", "b_j"])
+        constraint_table_card.layout().addWidget(self.constraint_table)
+        
+        # 3. RESULTS
+        result_card = self.create_card("📊 RESULTS")
+        self.result_output = QTextEdit()
+        self.result_output.setReadOnly(True)
+        self.result_output.setStyleSheet(f"""
+            QTextEdit {{
+                background-color: {self.colors['card']};
+                color: {self.colors['text']};
+                border: 1px solid {self.colors['dark']};
+                border-radius: 5px;
+                padding: 10px;
+                font-family: 'Consolas';
+            }}
+        """)
+        result_card.layout().addWidget(self.result_output)
+        
+        # Error label
+        self.error_label = QLabel()
+        self.error_label.setStyleSheet(f"color: {self.colors['danger']};")
+        self.error_label.setAlignment(Qt.AlignCenter)
+        
+        # Add content area components with stretch factors
+        content_layout.addWidget(cost_table_card, stretch=1)
+        content_layout.addWidget(constraint_table_card, stretch=1)
+        content_layout.addWidget(result_card, stretch=1)  
+        content_layout.addWidget(self.error_label)
+    def create_card(self, title):
+        card = QFrame()
+        card.setFrameShape(QFrame.StyledPanel)
+        card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
+        card.setStyleSheet(f"""
+            QFrame {{
+                background-color: {self.colors['card']};
+                border-radius: 10px;
+                padding: 5px;
+            }}
+        """)
+        
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(8)
+        
+        title_label = QLabel(title)
+        title_label.setStyleSheet(f"""
+            QLabel {{
+                color: {self.colors['primary']};
+                font-weight: bold;
+                font-size: 14px;
+                padding-bottom: 5px;
+            }}
+        """)
+        layout.addWidget(title_label)
+        
+        return card
+    def create_input(self, label_text, placeholder="", initial_value=""):
+        widget = QWidget()
+        widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(0, 0, 0, 0)
+        
+        label = QLabel(label_text)
+        label.setStyleSheet(f"color: {self.colors['text']};")
+        
+        entry = QLineEdit()
+        entry.setPlaceholderText(placeholder)
+        if initial_value:
+            entry.setText(initial_value)
+        entry.setStyleSheet(f"""
+            QLineEdit {{
+                background-color: {self.colors['card']};
+                color: {self.colors['text']};
+                border: 1px solid {self.colors['dark']};
+                border-radius: 5px;
+                padding: 8px;
+            }}
+        """)
+        
+        layout.addWidget(label)
+        layout.addWidget(entry)
+        
+        widget.entry = entry
+        return widget
+    def create_button(self, text, color, action=None, tooltip=""):
+        btn = QPushButton(text)
+        btn.setCursor(Qt.PointingHandCursor)
+        btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {color};
+                color: white;
+                border: none;
+                border-radius: 5px;
+                padding: 10px;
+                font-weight: bold;
+                min-width: 80px;
+            }}
+            QPushButton:hover {{
+                background-color: {self.darken_color(color, 10)};
+            }}
+            QPushButton:pressed {{
+                background-color: {self.darken_color(color, 20)};
+            }}
+        """)
+        
+        if action:
+            btn.clicked.connect(action)
+        if tooltip:
+            btn.setToolTip(tooltip)
             
+        return btn
+    def create_table(self, headers, rows=0):
+        table = QTableWidget(rows, len(headers))
+        table.setHorizontalHeaderLabels(headers)
+        table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        table.verticalHeader().setVisible(False)
+        table.setEditTriggers(QTableWidget.NoEditTriggers)
+        table.setSelectionBehavior(QTableWidget.SelectRows)
+        table.setStyleSheet(f"""
+            QTableWidget {{
+                background-color: {self.colors['card']};
+                color: {self.colors['text']};
+                border: 1px solid {self.colors['dark']};
+                border-radius: 5px;
+                gridline-color: {self.colors['dark']};
+            }}
+            QHeaderView::section {{
+                background-color: {self.colors['dark']};
+                color: {self.colors['text']};
+                padding: 5px;
+                border: none;
+            }}
+        """)
+        return table
+
+    def darken_color(self, hex_color, percent):
+        """Darken a hex color by a percentage"""
+        rgb = tuple(int(hex_color.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
+        darkened = tuple(max(0, int(c * (100 - percent) / 100)) for c in rgb)
+        return '#%02x%02x%02x' % darkened
+    def add_cost(self):
         try:
-            with open(path, 'r') as f:
-                reader = csv.reader(f)
-                # First row should be costs
-                try:
-                    self.costs = list(map(float, next(reader)))
-                except StopIteration:
-                    self.error_label.config(text="Empty CSV file.")
-                    return
-                except ValueError:
-                    self.error_label.config(text="Invalid cost values in CSV.")
-                    return
-                    
-                # Remaining rows are constraints
-                self.constraints = []
-                for row in reader:
-                    if not row:
-                        continue
-                    try:
-                        a_ij = list(map(float, row[:-1]))
-                        b_j = float(row[-1])
-                        
-                        # Validate constraint length
-                        if len(a_ij) != len(self.costs):
-                            self.error_label.config(text=f"Constraint in CSV has wrong length: expected {len(self.costs)}, got {len(a_ij)}.")
-                            self.costs = []
-                            self.constraints = []
-                            return
-                            
-                        self.constraints.append((a_ij, b_j))
-                    except ValueError:
-                        self.error_label.config(text="Invalid constraint values in CSV.")
-                        self.costs = []
-                        self.constraints = []
-                        return
-                        
-            self.update_lists()
-            self.error_label.config(text="")
+            value = float(self.cost_input.entry.text())
+            self.costs.append(value)
             
-        except Exception as e:
-            self.error_label.config(text=f"Error loading file: {str(e)}")
+            # Clear and rebuild the entire cost table each time
+            self.cost_table.clear()
+            self.cost_table.setRowCount(1)
+            self.cost_table.setColumnCount(len(self.costs))
+            
+            # Add all costs (including the new one)
+            for col, cost in enumerate(self.costs):
+                item = QTableWidgetItem(str(cost))
+                item.setTextAlignment(Qt.AlignCenter) 
+                self.cost_table.setItem(0, col, item)
+                
+            self.cost_input.entry.clear()
+            self.update_constraint_headers()
+            self.error_label.setText("")
+        except ValueError:
+            self.error_label.setText("Invalid cost value")
+    def add_constraint(self):
+        try:
+            a_ij = list(map(float, self.a_ij_input.entry.text().split(',')))
+            b_j = float(self.b_j_input.entry.text())
+            if len(a_ij) != len(self.costs):
+                self.error_label.setText("Length of a_ij must match number of costs")
+                return
+            self.constraints.append((a_ij, b_j))
+            row = self.constraint_table.rowCount()
+            col_count = len(self.costs) + 1
+            self.constraint_table.setColumnCount(col_count)
+            self.constraint_table.setRowCount(row + 1)
+            for i in range(len(a_ij)):
+                item = QTableWidgetItem(str(a_ij[i]))
+                item.setTextAlignment(Qt.AlignCenter)  # Center alignment
+                self.constraint_table.setItem(row, i, item)
+            b_item = QTableWidgetItem(str(b_j))
+            b_item.setTextAlignment(Qt.AlignCenter)  # Center alignment
+            self.constraint_table.setItem(row, len(a_ij), b_item)
+            self.a_ij_input.entry.clear()
+            self.b_j_input.entry.clear()
+            self.error_label.setText("")
+        except ValueError:
+            self.error_label.setText("Invalid constraint format")
 
-    def save_data(self):
-        if not self.costs:
-            self.error_label.config(text="No data to save.")
-            return
-            
-        path = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("CSV", "*.csv")])
+    
+    def update_constraint_headers(self):
+        """Update table headers and ensure they remain visible"""
+        # Always show headers, even for empty tables
+        cost_headers = [f"c_{i}" for i in range(len(self.costs) or 1)]  # Show at least one header
+        constraint_headers = [f"a_{i}" for i in range(len(self.costs) or 1)] + ["b_j"]
+        
+        # Cost table headers
+        self.cost_table.setColumnCount(len(cost_headers))
+        self.cost_table.setHorizontalHeaderLabels(cost_headers)
+        
+        # Constraint table headers
+        self.constraint_table.setColumnCount(len(constraint_headers))
+        self.constraint_table.setHorizontalHeaderLabels(constraint_headers)
+        
+        # Force headers to be visible
+        self.cost_table.horizontalHeader().show()
+        self.constraint_table.horizontalHeader().show()
+    def solve(self):
+        try:
+            demand = float(self.demand_input.entry.text())
+            solver = ResourceSolver(self.costs, self.constraints, self.error_label, self.result_output, demand)
+            solver.solve()
+        except Exception as e:
+            self.error_label.setText(str(e))
+
+    def clear_all(self):
+       
+        # Clear the data structures
+        self.costs = []
+        self.constraints = []
+        
+        # Clear the table contents but preserve structure
+        self.cost_table.clearContents()
+        self.constraint_table.clearContents()
+        
+        # Set up empty tables with correct headers
+        self.cost_table.setRowCount(1)
+        self.cost_table.setColumnCount(0)  # Will be updated below
+        
+        self.constraint_table.setRowCount(0)
+        self.constraint_table.setColumnCount(0)  # Will be updated below
+        
+        # Force header update and visibility
+        self.update_constraint_headers()
+        
+        # Clear other UI elements
+        self.error_label.setText("")
+        self.result_output.clear()
+    def load_all_data(self):
+        path, _ = QFileDialog.getOpenFileName(self, "Open CSV", "", "CSV Files (*.csv)")
         if not path:
             return
-            
+        try:
+            with open(path, newline='') as f:
+                reader = csv.reader(f)
+                rows = list(reader)
+
+                # First row = costs
+                self.costs = list(map(float, rows[0]))
+                self.cost_table.clear()
+                self.cost_table.setRowCount(1)
+                self.cost_table.setColumnCount(len(self.costs))
+                for i, cost in enumerate(self.costs):
+                    item = QTableWidgetItem(str(cost))
+                    item.setTextAlignment(Qt.AlignCenter)
+                    self.cost_table.setItem(0, i, item)
+
+                # Reset and load constraints
+                self.constraints = []
+                self.constraint_table.clear()
+                self.constraint_table.setRowCount(len(rows)-1)  # Set all rows at once
+                self.constraint_table.setColumnCount(len(self.costs) + 1)  # +1 for b_j
+                
+                for i, row in enumerate(rows[1:]):
+                    a_ij = list(map(float, row[:-1]))
+                    b_j = float(row[-1])
+                    self.constraints.append((a_ij, b_j))
+                    
+                    # Add all constraint values for this row
+                    for j, val in enumerate(a_ij + [b_j]):
+                        item = QTableWidgetItem(str(val))
+                        item.setTextAlignment(Qt.AlignCenter)
+                        self.constraint_table.setItem(i, j, item)
+
+                self.update_constraint_headers()
+                self.error_label.setText("")
+        except Exception as e:
+            self.error_label.setText(f"Failed to load CSV: {e}")
+    def save_all_data(self):
+        path, _ = QFileDialog.getSaveFileName(self, "Save CSV", "", "CSV Files (*.csv)")
+        if not path:
+            return
         try:
             with open(path, 'w', newline='') as f:
                 writer = csv.writer(f)
                 writer.writerow(self.costs)
                 for a_ij, b_j in self.constraints:
                     writer.writerow(a_ij + [b_j])
-            self.error_label.config(text="")
+            self.error_label.setText("")
         except Exception as e:
-            self.error_label.config(text=f"Error saving file: {str(e)}")
+            self.error_label.setText(f"Failed to save CSV: {e}")
 
-    def update_lists(self):
-        self.costs_listbox.delete(0, tk.END)
-        for i, cost in enumerate(self.costs):
-            self.costs_listbox.insert(tk.END, f"c_{i}: {cost:.2f}")
-        self.constraints_listbox.delete(0, tk.END)
-        for a_ij, b_j in self.constraints:
-            self.constraints_listbox.insert(tk.END, f"{a_ij} <= {b_j:.2f}")
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    app = ResourceAllocator(root)
-    root.mainloop()
+    app = QApplication(sys.argv)
+    app.setFont(QFont("Segoe UI", 10))
+    window = ResourceAllocator()
+    window.show()
+    sys.exit(app.exec_())
