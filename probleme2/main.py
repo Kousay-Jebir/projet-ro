@@ -2,19 +2,19 @@ import sys
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
     QLineEdit, QTextEdit, QTableWidget, QTableWidgetItem, QFileDialog,
-    QMessageBox, QHeaderView, QFrame, QSizePolicy, QScrollArea
+    QHeaderView, QFrame, QSizePolicy, QMainWindow
 )
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont, QPalette, QColor
 import csv
-from resource_solver import ResourceSolver
+from .resource_solver import ResourceSolver
 
-
-class ResourceAllocator(QWidget):
-    def __init__(self):
+class ResourceAllocator(QMainWindow):
+    def __init__(self, home_window=None):
         super().__init__()
+        self.home_window = home_window 
         self.setWindowTitle("📊 Resource Allocation Minimizer")
-        self.setMinimumSize(1200, 800)
+        self.setMinimumSize(1800, 1000)
         self.costs = []
         self.constraints = []
         
@@ -34,7 +34,34 @@ class ResourceAllocator(QWidget):
         
         self.set_dark_theme()
         self.init_ui()
-
+    # def init_return_button(self):
+    #     """Initialize the return to home button"""
+    #     return_btn = QPushButton("← Home", self)
+    #     return_btn.setFixedSize(100, 30)
+    #     return_btn.move(10, 10)
+    #     return_btn.setStyleSheet("""
+    #         QPushButton {
+    #             background-color: #4a6da7;
+    #             color: white;
+    #             border: none;
+    #             border-radius: 4px;
+    #             padding: 5px;
+    #             font-size: 12px;
+    #         }
+    #         QPushButton:hover {
+    #             background-color: #5a7db7;
+    #         }
+    #     """)
+    #     return_btn.clicked.connect(self.return_to_home)
+    #     return_btn.setCursor(Qt.PointingHandCursor)
+        
+    def return_to_home(self):
+        """Return to home screen"""
+        self.close()
+        if hasattr(self, 'home_window') and self.home_window:
+            self.home_window.show()
+            self.home_window.activateWindow()
+        
     def set_dark_theme(self):
         palette = QPalette()
         palette.setColor(QPalette.Window, QColor(self.colors["background"]))
@@ -53,11 +80,31 @@ class ResourceAllocator(QWidget):
 
     def init_ui(self):
         # Main layout with sidebar and content area
-        main_layout = QHBoxLayout(self)
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+
+        main_vertical_layout = QVBoxLayout(central_widget)
+        main_vertical_layout.setContentsMargins(0, 0, 0, 0)
+        main_vertical_layout.setSpacing(0)
+
+        content_area= QWidget()    
+        main_layout = QHBoxLayout(content_area)
         main_layout.setContentsMargins(10, 10, 10, 10)
         main_layout.setSpacing(10)
         
-        # Left sidebar (operations)
+        top_bar = QWidget()
+        top_bar.setFixedHeight(80)
+        top_bar.setStyleSheet(f"background-color: {self.colors['dark']};")
+        top_layout = QHBoxLayout(top_bar)
+        top_layout.setContentsMargins(10, 0, 10, 0)
+
+        self.return_btn = self.create_button("← Return to Home", self.colors["primary"])
+        self.return_btn.setFixedSize(180, 50)
+        self.return_btn.clicked.connect(self.return_to_home)
+        top_layout.addStretch()
+        top_layout.addWidget(self.return_btn)
+        
+        main_vertical_layout.addWidget(top_bar)
         sidebar = QWidget()
         sidebar.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         sidebar_layout = QVBoxLayout(sidebar)
@@ -73,7 +120,8 @@ class ResourceAllocator(QWidget):
         
         # Set fixed ratio (1:3)
         main_layout.addWidget(sidebar, stretch=1)  # Sidebar gets 1 part
-        main_layout.addWidget(content, stretch=2)  # Content gets 3 parts
+        main_layout.addWidget(content, stretch=2) 
+        main_vertical_layout.addWidget(content_area) # Content gets 3 parts
         
         # 1. ADD COST section in sidebar
         cost_card = self.create_card("💰 ADD COST")
