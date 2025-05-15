@@ -2,7 +2,6 @@ import gurobipy as grb
 from PyQt5.QtWidgets import QMessageBox, QStatusBar, QTextEdit
 import networkx as nx
 
-
 class GurobiSolver:
     def __init__(self, graph, status_bar: QStatusBar, result_text: QTextEdit, start_node, end_node):
         self.graph = graph
@@ -27,8 +26,8 @@ class GurobiSolver:
 
             # Objective function: minimize total weight of selected edges
             model.setObjective(
-                grb.quicksum(variables[(u, v)] * self.graph[u][v]['weight'] 
-                for u, v in self.graph.edges),
+                grb.quicksum(variables[(u, v)] * self.graph[u][v]['weight']
+                            for u, v in self.graph.edges),
                 sense=grb.GRB.MINIMIZE
             )
 
@@ -36,7 +35,7 @@ class GurobiSolver:
             for node in self.graph.nodes:
                 inflow = grb.quicksum(variables[(u, v)] for (u, v) in self.graph.edges if v == node)
                 outflow = grb.quicksum(variables[(u, v)] for (u, v) in self.graph.edges if u == node)
-                
+
                 if node == self.start_node:
                     model.addConstr(outflow - inflow == 1, name=f"flow_start_{node}")
                 elif node == self.end_node:
@@ -48,15 +47,32 @@ class GurobiSolver:
             model.optimize()
 
             if model.status == grb.GRB.OPTIMAL:
-                result = "Optimal solution found:\n"
-                for (u, v) in self.graph.edges:
-                    if variables[(u, v)].x > 0.5:
-                        result += f"{u} → {v} (Weight: {self.graph[u][v]['weight']})\n"
+                result = "Optimal path:\n"
+                current_node = self.start_node
+                path = [current_node]
+                total_weight = 0
+
+                # Trace the ordered path and collect weights of each step
+                steps = []
+                while current_node != self.end_node:
+                    for (u, v) in self.graph.edges:
+                        if u == current_node and variables[(u, v)].x > 0.5:
+                            step_weight = self.graph[u][v]['weight']
+                            total_weight += step_weight
+                            path.append(v)
+                            steps.append(f"{u} → {v} (Weight: {step_weight})")
+                            current_node = v
+                            break
+
+                # Format the result
+                path_str = " → ".join(str(node) for node in path)
+                step_details = "\n".join(steps)
+                result += f"Path: {path_str}\nSteps:\n{step_details}\nTotal weight: {total_weight}"
                 self.result_text.setPlainText(result)
                 self.status_bar.showMessage("Solution found successfully!", 3000)
             else:
                 self.display_error("No optimal solution found.")
-                
+
         except grb.GurobiError as e:
             self.display_error(f"Gurobi error: {e}")
         except Exception as e:
