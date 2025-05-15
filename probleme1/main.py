@@ -33,7 +33,7 @@ class GraphEditor(QMainWindow):
         # Set dark theme
         self.set_dark_theme()
         
-        self.graph = nx.Graph()
+        self.graph = nx.DiGraph()
         self.start_node = None
         self.end_node = None
         # self.init_return_button()

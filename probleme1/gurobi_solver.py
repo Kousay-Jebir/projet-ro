@@ -73,4 +73,5 @@ class GurobiSolver:
         msg.setIcon(QMessageBox.Critical)
         msg.setWindowTitle(title)
         msg.setText(message)
+        msg.setStyleSheet("QLabel{color: black;} QMessageBox{background-color: white;}")
         msg.exec_()
