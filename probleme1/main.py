@@ -7,7 +7,7 @@ from PyQt5.QtGui import QFont, QColor, QPalette, QIcon
 import networkx as nx
 import sys
 import re
-from gurobi_solver import GurobiSolver
+from .gurobi_solver import GurobiSolver
 
 class GraphEditor(QMainWindow):
     def __init__(self, home_window=None):

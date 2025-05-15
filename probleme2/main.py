@@ -7,7 +7,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont, QPalette, QColor
 import csv
-from resource_solver import ResourceSolver
+from .resource_solver import ResourceSolver
 
 class ResourceAllocator(QMainWindow):
     def __init__(self, home_window=None):
