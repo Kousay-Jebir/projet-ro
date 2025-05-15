@@ -6,7 +6,7 @@ from PyQt5.QtCore import Qt, QSize
 from PyQt5.QtGui import QFont, QColor, QPalette, QIcon
 import networkx as nx
 import sys
-import re
+import re, csv
 from .gurobi_solver import GurobiSolver
 
 class GraphEditor(QMainWindow):
@@ -48,7 +48,7 @@ class GraphEditor(QMainWindow):
             self.home_window.show()
             self.home_window.activateWindow()
     def init_ui(self):
-        # Main widget and layout
+
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         main_vertical_layout = QVBoxLayout(central_widget)
@@ -102,10 +102,19 @@ class GraphEditor(QMainWindow):
         edge_content.layout.addWidget(self.edge_nodes_widget)
         edge_content.layout.addWidget(self.edge_weight_widget)
         edge_content.layout.addWidget(add_edge_btn)
+
+        csv_group, csv_content = self.create_card("CSV OPERATIONS")
+        add_csv_btn = self.create_button("Load CSV", self.colors["primary"], icon="📂", 
+                                        action=self.load_graph, tooltip="load a csv file")
+        csv_content.layout.addWidget(add_csv_btn)
+        save_csv_btn = self.create_button("Save CSV", self.colors["primary"], icon="💾", 
+                                        action=self.save_graph, tooltip="save a csv file")
+        csv_content.layout.addWidget(save_csv_btn)
         
         # Add widgets to sidebar
         sidebar_layout.addWidget(node_group)
         sidebar_layout.addWidget(edge_group)
+        sidebar_layout.addWidget(csv_group)
         sidebar_layout.addStretch()
                 
         # Right content area
@@ -186,8 +195,7 @@ class GraphEditor(QMainWindow):
                 color: {self.colors['text']};
                 border-top: 1px solid {self.colors['card']};
             }}
-        """)
-        
+        """)      
     def create_card(self, title):
         card = QFrame()
         card.setFrameShape(QFrame.StyledPanel)
@@ -305,7 +313,7 @@ class GraphEditor(QMainWindow):
     def get_combo_style(self):
         return f"""
             QComboBox {{
-                background-color: {self.colors['card']};
+                background-color: {self.colors['dark']};
                 color: {self.colors['text']};
                 border: 1px solid {self.colors['dark']};
                 border-radius: 5px;
@@ -342,7 +350,6 @@ class GraphEditor(QMainWindow):
         palette.setColor(QPalette.Highlight, QColor(self.colors["secondary"]))
         palette.setColor(QPalette.HighlightedText, Qt.white)
         QApplication.setPalette(palette)
-    # ===== Core Functionality (unchanged from original) =====
     def validate_node_name(self, node_name):
         return bool(node_name and re.match(r'^[a-zA-Z0-9_-]+$', node_name))
 
@@ -429,17 +436,46 @@ class GraphEditor(QMainWindow):
     def load_graph(self):
         path, _ = QFileDialog.getOpenFileName(self, "Open Graph", "", "CSV Files (*.csv)")
         if path:
-            with open(path) as f:
-                reader = csv.reader(f)
-                for row in reader:
-                    if len(row)==1: 
-                        self.graph.add_node(row[0])
-                    elif len(row)==3: 
-                        self.graph.add_edge(row[0], row[1], weight=float(row[2]))
-            self.update_node_list()
-            self.update_edge_list()
-            self.show_status("Graph loaded successfully", False)
-
+            try:
+                with open(path) as f:
+                    # Debug: Print raw content
+                    content = f.read()
+                    print(f"File content:\n{content}")
+                    f.seek(0)
+                    
+                    # Process file
+                    reader = csv.reader(f)
+                    self.graph.clear()  # Clear existing graph
+                    
+                    for row in reader:
+                        if not row:  # Skip empty lines
+                            continue
+                        if len(row) == 1: 
+                            self.graph.add_node(row[0].strip())
+                        elif len(row) == 3: 
+                            try:
+                                weight = float(row[2])
+                                self.graph.add_edge(row[0].strip(), row[1].strip(), weight=weight)
+                            except ValueError:
+                                print(f"Skipping invalid edge weight: {row[2]}")
+                
+                # Debug: Verify graph state
+                print("Final nodes:", self.graph.nodes())
+                print("Final edges:", self.graph.edges(data=True))
+                
+                # Update UI
+                self.update_node_list()
+                self.update_edge_list()
+                
+                # Force refresh
+                self.nodes_table.resizeColumnsToContents()
+                self.edges_table.resizeColumnsToContents()
+                
+                self.show_status("Graph loaded successfully", False)
+                
+            except Exception as e:
+                self.show_status(f"Error loading file: {str(e)}")
+                print(f"Error: {e}")       
     def save_graph(self):
         path, _ = QFileDialog.getSaveFileName(self, "Save Graph", "", "CSV Files (*.csv)")
         if path:
