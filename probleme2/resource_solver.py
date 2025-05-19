@@ -2,12 +2,13 @@ from PyQt5.QtWidgets import QLabel, QTextEdit
 import gurobipy as grb
 
 class ResourceSolver:
-    def __init__(self, costs, constraints, error_label: QLabel, result_text: QTextEdit, demand=None):
+    def __init__(self, costs, constraints, error_label: QLabel, result_text: QTextEdit, demand=None, max_value=None):
         self.costs = costs
         self.constraints = constraints
         self.error_label = error_label
         self.result_text = result_text
         self.demand = demand
+        self.max_value = max_value
 
     def solve(self):
         if not self.costs or not self.constraints:
@@ -25,7 +26,11 @@ class ResourceSolver:
             model.setParam('OutputFlag', 0)
 
             activities = range(len(self.costs))
-            x = [model.addVar(lb=0, name=f"x_{i}") for i in activities]
+            # Set upper bound if max_value is provided
+            if self.max_value is not None:
+                x = [model.addVar(lb=0, ub=self.max_value, name=f"x_{i}") for i in activities]
+            else:
+                x = [model.addVar(lb=0, name=f"x_{i}") for i in activities]
 
             if self.demand is not None and self.demand > 0:
                 model.addConstr(grb.quicksum(x[i] for i in activities) >= self.demand, name="demand")

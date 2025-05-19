@@ -133,8 +133,8 @@ class ResourceAllocator(QMainWindow):
         
         # 2. ADD CONSTRAINTS section in sidebar
         constraint_card = self.create_card("🔗 ADD CONSTRAINTS")
-        self.a_ij_input = self.create_input("a_ij:", placeholder="Comma separated values")
-        self.b_j_input = self.create_input("b_j:", placeholder="Constraint value")
+        self.a_ij_input = self.create_input("product coefficients:", placeholder="Comma separated values")
+        self.b_j_input = self.create_input("Constraint value:", placeholder="Constraint value")
         add_constraint_btn = self.create_button("➕ Add Constraint", self.colors["success"], 
                                             action=self.add_constraint, tooltip="Add a constraint")
         constraint_card.layout().addWidget(self.a_ij_input)
@@ -153,11 +153,13 @@ class ResourceAllocator(QMainWindow):
         # 4. SOLVE/CLEAR section in sidebar
         action_card = self.create_card("⚡ ACTIONS")
         self.demand_input = self.create_input("Min Demand:", initial_value="5.0")
+        self.max_value_input = self.create_input("Max Value:", placeholder="Leave empty for no max")
         solve_btn = self.create_button("🚀 Solve", self.colors["secondary"], 
                                     action=self.solve, tooltip="Solve the optimization problem")
         clear_btn = self.create_button("🧹 Clear All", self.colors["danger"], 
                                     action=self.clear_all, tooltip="Clear all inputs")
         action_card.layout().addWidget(self.demand_input)
+        action_card.layout().addWidget(self.max_value_input)
         action_card.layout().addWidget(solve_btn)
         action_card.layout().addWidget(clear_btn)
         
@@ -227,7 +229,7 @@ class ResourceAllocator(QMainWindow):
             QLabel {{
                 color: {self.colors['primary']};
                 font-weight: bold;
-                font-size: 14px;
+                font-size: 16px;
                 padding-bottom: 5px;
             }}
         """)
@@ -368,8 +370,8 @@ class ResourceAllocator(QMainWindow):
     def update_constraint_headers(self):
         """Update table headers and ensure they remain visible"""
         # Always show headers, even for empty tables
-        cost_headers = [f"c_{i}" for i in range(len(self.costs) or 1)]  # Show at least one header
-        constraint_headers = [f"a_{i}" for i in range(len(self.costs) or 1)] + ["b_j"]
+        cost_headers = [f"cost of product {i}" for i in range(len(self.costs) or 1)]  # Show at least one header
+        constraint_headers = [f"coeficient of product {i}" for i in range(len(self.costs) or 1)] + ["constraint value"]
         
         # Cost table headers
         self.cost_table.setColumnCount(len(cost_headers))
@@ -385,7 +387,9 @@ class ResourceAllocator(QMainWindow):
     def solve(self):
         try:
             demand = float(self.demand_input.entry.text())
-            solver = ResourceSolver(self.costs, self.constraints, self.error_label, self.result_output, demand)
+            max_value_text = self.max_value_input.entry.text().strip()
+            max_value = float(max_value_text) if max_value_text else None
+            solver = ResourceSolver(self.costs, self.constraints, self.error_label, self.result_output, demand, max_value)
             solver.solve()
         except Exception as e:
             self.error_label.setText(str(e))
@@ -413,6 +417,7 @@ class ResourceAllocator(QMainWindow):
         # Clear other UI elements
         self.error_label.setText("")
         self.result_output.clear()
+        self.max_value_input.entry.clear()
     def load_all_data(self):
         path, _ = QFileDialog.getOpenFileName(self, "Open CSV", "", "CSV Files (*.csv)")
         if not path:
@@ -470,7 +475,7 @@ class ResourceAllocator(QMainWindow):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    app.setFont(QFont("Segoe UI", 10))
+    app.setFont(QFont("Segoe UI", 16))
     window = ResourceAllocator()
     window.show()
     sys.exit(app.exec_())

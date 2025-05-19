@@ -1,13 +1,48 @@
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
                             QLabel, QLineEdit, QPushButton, QComboBox, QTextEdit, 
                             QTableWidget, QTableWidgetItem, QHeaderView, QFrame, 
-                            QMessageBox, QFileDialog, QSizePolicy)
+                            QMessageBox, QFileDialog, QSizePolicy, QDialog)
 from PyQt5.QtCore import Qt, QSize
 from PyQt5.QtGui import QFont, QColor, QPalette, QIcon
 import networkx as nx
 import sys
 import re, csv
 from .gurobi_solver import GurobiSolver
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+import matplotlib.pyplot as plt
+
+class GraphViewDialog(QDialog):
+    def __init__(self, graph, colors=None, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Graph View")
+        self.resize(600, 500)
+        self.graph = graph
+        self.colors = colors or {
+            "primary": "#4a6da7",
+            "secondary": "#6c5ce7",
+            "success": "#00b894",
+            "danger": "#d63031",
+            "warning": "#fdcb6e",
+            "dark": "#2d3436",
+            "light": "#dfe6e9",
+            "background": "#1e1e2e",
+            "card": "#2a2a3a",
+            "text": "#ffffff"
+        }
+        layout = QVBoxLayout(self)
+        self.figure, self.ax = plt.subplots()
+        self.canvas = FigureCanvas(self.figure)
+        layout.addWidget(self.canvas)
+        self.draw_graph()
+
+    def draw_graph(self):
+        self.ax.clear()
+        self.ax.set_facecolor(self.colors['background'])  # Set background color
+        pos = nx.spring_layout(self.graph)
+        nx.draw(self.graph, pos, ax=self.ax, with_labels=True, node_color=self.colors['primary'], edge_color=self.colors['secondary'], font_color=self.colors['text'])
+        edge_labels = nx.get_edge_attributes(self.graph, 'weight')
+        nx.draw_networkx_edge_labels(self.graph, pos, edge_labels=edge_labels, ax=self.ax, font_color=self.colors['warning'])
+        self.canvas.draw()
 
 class GraphEditor(QMainWindow):
     def __init__(self, home_window=None):
@@ -102,6 +137,13 @@ class GraphEditor(QMainWindow):
         edge_content.layout.addWidget(self.edge_nodes_widget)
         edge_content.layout.addWidget(self.edge_weight_widget)
         edge_content.layout.addWidget(add_edge_btn)
+
+        matrix_btn = self.create_button("Matrix Input", self.colors["warning"], icon="🧮",
+                                        action=self.open_matrix_input, tooltip="Define relations using a matrix")
+        edge_content.layout.addWidget(matrix_btn)
+
+        show_graph_btn = self.create_button("Show Graph", self.colors["secondary"], icon="🖼️", action=self.show_graph_view, tooltip="Visualize the current graph")
+        edge_content.layout.addWidget(show_graph_btn)
 
         csv_group, csv_content = self.create_card("CSV OPERATIONS")
         add_csv_btn = self.create_button("Load CSV", self.colors["primary"], icon="📂", 
@@ -272,10 +314,10 @@ class GraphEditor(QMainWindow):
                 min-width: 100px;
             }}
             QPushButton:hover {{
-                background-color: {self.darken_color(color, 10)};
+                background-color: {self.darken_color(color, 10)}
             }}
             QPushButton:pressed {{
-                background-color: {self.darken_color(color, 20)};
+                background-color: {self.darken_color(color, 20)}
             }}
         """)
         
@@ -486,6 +528,135 @@ class GraphEditor(QMainWindow):
                 for u, v, d in self.graph.edges(data=True): 
                     writer.writerow([u, v, d['weight']])
             self.show_status("Graph saved successfully", False)
+    def open_matrix_input(self):
+        nodes = list(self.graph.nodes)
+        if not nodes:
+            QMessageBox.warning(self, "Warning", "No nodes to create matrix for.")
+            return
+    
+        dialog = MatrixInputDialog(nodes, self, colors=self.colors, graph=self.graph)
+        if dialog.exec_() == QDialog.Accepted:
+            matrix = dialog.get_matrix()
+            self.graph.remove_edges_from(list(self.graph.edges))  # Clear previous edges
+            for (u, v), w in matrix.items():
+                self.graph.add_edge(u, v, weight=w)
+    
+            self.refresh_edges_table()
+            self.statusBar().showMessage("Edges updated via matrix.", 5000)
+    def refresh_edges_table(self):
+        self.edges_table.setRowCount(0)
+        for u, v, data in self.graph.edges(data=True):
+            row_pos = self.edges_table.rowCount()
+            self.edges_table.insertRow(row_pos)
+            self.edges_table.setItem(row_pos, 0, QTableWidgetItem(str(u)))
+            self.edges_table.setItem(row_pos, 1, QTableWidgetItem(str(v)))
+            self.edges_table.setItem(row_pos, 2, QTableWidgetItem(str(data.get("weight", ""))))
+
+    def show_graph_view(self):
+        dialog = GraphViewDialog(self.graph, colors=self.colors, parent=self)
+        dialog.exec_()
+
+class MatrixInputDialog(QDialog):
+    def __init__(self, nodes, parent=None, colors=None, graph=None):
+        super().__init__(parent)
+        self.setWindowTitle("Matrix Input")
+        self.resize(500, 400)
+        self.nodes = nodes
+        self.colors = colors or {
+            "primary": "#4a6da7",
+            "secondary": "#6c5ce7",
+            "success": "#00b894",
+            "danger": "#d63031",
+            "warning": "#fdcb6e",
+            "dark": "#2d3436",
+            "light": "#dfe6e9",
+            "background": "#1e1e2e",
+            "card": "#2a2a3a",
+            "text": "#ffffff"
+        }
+        self.graph = graph
+
+        layout = QVBoxLayout(self)
+
+        self.table = QTableWidget(len(nodes), len(nodes))
+        self.table.setHorizontalHeaderLabels(nodes)
+        self.table.setVerticalHeaderLabels(nodes)
+        layout.addWidget(self.table)
+
+        # Apply custom dark style to the dialog and table
+        self.setStyleSheet(f"""
+            QDialog {{
+                background-color: {self.colors['background']};
+            }}
+            QTableWidget {{
+                background-color: {self.colors['card']};
+                color: {self.colors['text']};
+                border: 1px solid {self.colors['dark']};
+                gridline-color: {self.colors['dark']};
+                selection-background-color: {self.colors['primary']};
+                selection-color: {self.colors['text']};
+            }}
+            QHeaderView::section {{
+                background-color: {self.colors['dark']};
+                color: {self.colors['text']};
+                font-weight: bold;
+                border: none;
+            }}
+            QPushButton {{
+                background-color: {self.colors['primary']};
+                color: {self.colors['text']};
+                border: none;
+                border-radius: 5px;
+                padding: 8px 18px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background-color: {self.colors['secondary']};
+            }}
+            QPushButton:pressed {{
+                background-color: {self.colors['success']};
+            }}
+        """)
+
+        # Initialize all cells to '0' to avoid empty cell warnings
+        for i in range(len(nodes)):
+            for j in range(len(nodes)):
+                self.table.setItem(i, j, QTableWidgetItem("0"))
+
+        # Pre-fill with current graph weights if provided
+        if self.graph is not None:
+            for u, v, data in self.graph.edges(data=True):
+                if u in self.nodes and v in self.nodes:
+                    i = self.nodes.index(u)
+                    j = self.nodes.index(v)
+                    self.table.setItem(i, j, QTableWidgetItem(str(data.get("weight", "0"))))
+
+        button_layout = QHBoxLayout()
+        apply_btn = QPushButton("Apply")
+        apply_btn.clicked.connect(self.accept)
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.clicked.connect(self.reject)
+        button_layout.addStretch()
+        button_layout.addWidget(apply_btn)
+        button_layout.addWidget(cancel_btn)
+
+        layout.addLayout(button_layout)
+
+    def get_matrix(self):
+        matrix = {}
+        for i, from_node in enumerate(self.nodes):
+            for j, to_node in enumerate(self.nodes):
+                item = self.table.item(i, j)
+                if item:
+                    try:
+                        weight = float(item.text())
+                        if weight != 0:
+                            matrix[(from_node, to_node)] = weight
+                    except ValueError:
+                        continue
+        return matrix
+
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

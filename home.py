@@ -101,7 +101,7 @@ class HomeWindow(QMainWindow):
         main_layout.addLayout(buttons_container)
         
         # Set application font
-        font = QFont("Segoe UI", 10)
+        font = QFont("Segoe UI", 14)
         self.setFont(font)
     
     def create_problem_card(self, icon_path, title, description):
