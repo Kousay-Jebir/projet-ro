@@ -21,13 +21,27 @@ class HomeWindow(QMainWindow):
             "danger": "#d63031",
             "warning": "#fdcb6e",
             "dark": "#2d3436",
-            "light": "#dfe6e9",
+            "light": "#e9dfe1",
             "background": "#1e1e2e",
             "card": "#2a2a3a",
             "text": "#ffffff"
         }
         
         self.set_dark_theme()
+        # Set global stylesheet for table widgets for better contrast
+        QApplication.instance().setStyleSheet(f'''
+            QTableWidget, QTableView {{
+                background-color: {self.colors['card']};
+                color: {self.colors['text']};
+                selection-background-color: {self.colors['primary']};
+                selection-color: {self.colors['text']};
+                gridline-color: {self.colors['dark']};
+            }}
+            QTableWidget QLineEdit, QTableView QLineEdit {{
+                background-color: {self.colors['dark']};
+                color: {self.colors['light']};
+            }}
+        ''')
         self.init_ui()
     
     def set_dark_theme(self):
@@ -35,7 +49,7 @@ class HomeWindow(QMainWindow):
         palette = QPalette()
         palette.setColor(QPalette.Window, QColor(self.colors["background"]))
         palette.setColor(QPalette.WindowText, QColor(self.colors["text"]))
-        palette.setColor(QPalette.Base, QColor(self.colors["card"]))
+        palette.setColor(QPalette.Base, QColor(self.colors["card"]))  # Editable widgets background (gray)
         palette.setColor(QPalette.AlternateBase, QColor(self.colors["dark"]))
         palette.setColor(QPalette.ToolTipBase, QColor(self.colors["dark"]))
         palette.setColor(QPalette.ToolTipText, QColor(self.colors["text"]))
