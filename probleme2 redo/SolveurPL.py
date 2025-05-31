@@ -21,15 +21,45 @@ class LPApp(QMainWindow):
         super().__init__()
         self.home_window = home_window
         self.setWindowTitle("Solveur de Problèmes de Programmation Linéaire")
-        self.setGeometry(100, 100, 800, 600)
+        self.setMinimumSize(1600, 1000)
+        # Modern color palette matching home.py
+        self.colors = {
+            "primary": "#4a6da7",
+            "secondary": "#6c5ce7",
+            "success": "#00b894",
+            "danger": "#d63031",
+            "warning": "#fdcb6e",
+            "dark": "#2d3436",
+            "light": "#dfe6e9",
+            "background": "#1e1e2e",
+            "card": "#2a2a3a",
+            "text": "#ffffff"
+        }
+        self.set_dark_theme()
         self.initUI()
         self.setWindowIcon(QtGui.QIcon('sus.png'))
+
+    def set_dark_theme(self):
+        palette = QPalette()
+        palette.setColor(QPalette.Window, QColor(self.colors["background"]))
+        palette.setColor(QPalette.WindowText, QColor(self.colors["text"]))
+        palette.setColor(QPalette.Base, QColor(self.colors["card"]))
+        palette.setColor(QPalette.AlternateBase, QColor(self.colors["dark"]))
+        palette.setColor(QPalette.ToolTipBase, QColor(self.colors["dark"]))
+        palette.setColor(QPalette.ToolTipText, QColor(self.colors["text"]))
+        palette.setColor(QPalette.Text, QColor(self.colors["text"]))
+        palette.setColor(QPalette.Button, QColor(self.colors["primary"]))
+        palette.setColor(QPalette.ButtonText, QColor(self.colors["text"]))
+        palette.setColor(QPalette.BrightText, Qt.red)
+        palette.setColor(QPalette.Highlight, QColor(self.colors["secondary"]))
+        palette.setColor(QPalette.HighlightedText, Qt.white)
+        QApplication.setPalette(palette)
 
     def initUI(self):
         self.setAutoFillBackground(True)
         palette = self.palette()
-        pixmap = QPixmap("bg.jpg").scaled(self.size(), Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
-        palette.setBrush(QPalette.Window, QBrush(pixmap))
+        # Remove background image, use background color
+        palette.setColor(QPalette.Window, QColor(self.colors["background"]))
         self.setPalette(palette)
 
         self.main_widget = QWidget(self)
@@ -112,30 +142,31 @@ class LPApp(QMainWindow):
 
     def createStyledLabel(self, text, font_size):
         label = QLabel(text, self)
-        label.setStyleSheet(f"color: #F5F6FA; font-family: 'Trebuchet MS'; font-size: {font_size}px; font-weight: bold;")
+        label.setStyleSheet(f"color: {self.colors['text']}; font-family: 'Segoe UI'; font-size: {font_size}px; font-weight: bold;")
         label.setAlignment(Qt.AlignCenter)
         return label
 
     def createStyledLineEdit(self):
         line_edit = QLineEdit(self)
         line_edit.setStyleSheet(
-            "color: #F5F6FA; background-color: #23272F; border: 2px solid #3A3F4B; border-radius: 5px; padding: 5px;")
-        line_edit.setFont(QFont("Trebuchet MS", 14, QFont.Bold))
+            f"color: {self.colors['text']}; background-color: {self.colors['card']}; border: 2px solid {self.colors['dark']}; border-radius: 5px; padding: 5px;")
+        line_edit.setFont(QFont("Segoe UI", 14, QFont.Bold))
         return line_edit
 
-    def createStyledButton(self, text, callback, color):
-        # Use modern blue as base, override if needed
-        base_color = color if color else "#2979FF"
-        darker_color = self.adjust_color_brightness(base_color, -40)
-        even_darker_color = self.adjust_color_brightness(base_color, -80)
+    def createStyledButton(self, text, callback, color=None):
+        base_color = color if color else self.colors['primary']
+        darker_color = self.darken_color(base_color, 10)
+        even_darker_color = self.darken_color(base_color, 20)
         button = QPushButton(text, self)
         button.setStyleSheet(f"""
             QPushButton {{
-                color: #F5F6FA; 
-                background-color: {base_color}; 
-                border: 2px solid #2979FF; 
-                border-radius: 5px;
-                padding: 5px 10px;
+                color: {self.colors['text']};
+                background-color: {base_color};
+                border: none;
+                border-radius: 10px;
+                padding: 8px 16px;
+                font-size: 20px;
+                font-weight: bold;
             }}
             QPushButton:hover {{
                 background-color: {darker_color};
@@ -144,65 +175,65 @@ class LPApp(QMainWindow):
                 background-color: {even_darker_color};
             }}
         """)
-        button.setFont(QFont("Trebuchet MS", 12, QFont.Bold))
+        button.setFont(QFont("Segoe UI", 14, QFont.Bold))
         button.clicked.connect(callback)
         return button
 
-    def adjust_color_brightness(self, color, amount):
-        color = QColor(color)
-        color = color.darker(100 + amount) if amount < 0 else color.lighter(100 + amount)
-        return color.name()
+    def darken_color(self, hex_color, percent):
+        rgb = tuple(int(hex_color.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
+        darkened = tuple(max(0, int(c * (100 - percent) / 100)) for c in rgb)
+        return '#%02x%02x%02x' % darkened
 
     def createStyledComboBox(self):
         combo_box = QComboBox(self)
-        combo_box.setStyleSheet("""
-            QComboBox {
-                color: #F5F6FA;
-                background-color: #23272F;
-                border: 2px solid #3A3F4B;
+        combo_box.setStyleSheet(f"""
+            QComboBox {{
+                color: {self.colors['text']};
+                background-color: {self.colors['card']};
+                border: 2px solid {self.colors['dark']};
                 border-radius: 5px;
                 padding: 5px;
-            }
-            QComboBox:hover {
-                background-color: #2C313A;
-            }
-            QComboBox::drop-down {
+            }}
+            QComboBox:hover {{
+                background-color: {self.darken_color(self.colors['card'], 5)};
+            }}
+            QComboBox::drop-down {{
                 subcontrol-origin: padding;
                 subcontrol-position: top right;
                 width: 15px;
                 border-left-width: 1px;
-                border-left-color: #3A3F4B;
+                border-left-color: {self.colors['dark']};
                 border-left-style: solid;
                 border-top-right-radius: 3px;
                 border-bottom-right-radius: 3px;
-            }
-            QComboBox QAbstractItemView {
-                color: #F5F6FA;
-                background-color: #23272F;
-                selection-background-color: #2979FF;
-                border: 1px solid #3A3F4B;
-            }
+            }}
+            QComboBox QAbstractItemView {{
+                color: {self.colors['text']};
+                background-color: {self.colors['card']};
+                selection-background-color: {self.colors['primary']};
+                border: 1px solid {self.colors['dark']};
+            }}
         """)
-        combo_box.setFont(QFont("Trebuchet MS", 14, QFont.Bold))
+        combo_box.setFont(QFont("Segoe UI", 14, QFont.Bold))
         return combo_box
 
     def createTableStyle(self):
-        return """
-            QTableWidget {
-                background-color: #23272F;
-                border: 2px solid #3A3F4B;
+        return f"""
+            QTableWidget {{
+                background-color: {self.colors['card']};
+                border: 2px solid {self.colors['dark']};
                 border-radius: 5px;
-                color: #F5F6FA;
+                color: {self.colors['text']};
                 font-size: 14px;
                 font-weight: bold;
-                gridline-color: #2979FF;
-            }
-            QHeaderView::section {
-                background-color: #2979FF;
-                color: #F5F6FA;
+                gridline-color: {self.colors['primary']};
+            }}
+            QHeaderView::section {{
+                background-color: {self.colors['primary']};
+                color: {self.colors['text']};
                 border: none;
                 font-weight: bold;
-            }
+            }}
         """
 
     def center_buttons(self, buttons):
