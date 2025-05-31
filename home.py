@@ -229,22 +229,22 @@ class HomeWindow(QMainWindow):
             )
     def open_resource_mgmt(self):
         try:
-            import importlib.util
             project_root = str(Path(__file__).parent)
             if project_root not in sys.path:
                 sys.path.append(project_root)
-            module_path = Path(project_root) / "probleme2 redo" / "SolveurPL.py"
-            print(f"Loading module from: {module_path}")
-            spec = importlib.util.spec_from_file_location("probleme2_redo.SolveurPL", str(module_path))
+            # Import PharmaSolver from pharma.py using importlib
+            import importlib.util
+            module_path = Path(project_root) / "probleme2 redo" / "pharma.py"
+            spec = importlib.util.spec_from_file_location("probleme2_redo.pharma", str(module_path))
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
-            LPApp = getattr(module, "LPApp")
-            self.solver = LPApp(home_window=self)
+            PharmaSolver = getattr(module, "PharmaSolver")
+            self.solver = PharmaSolver()
             self.solver.show()
             self.hide()
         except Exception as e:
             print(e)
-            QMessageBox.critical(self, "Error", f"Failed to load resource allocator (probleme2 redo):\n{str(e)}")
+            QMessageBox.critical(self, "Error", f"Failed to load pharmaceutical optimizer (pharma.py):\n{str(e)}")
     def show_returned(self):
         """Show the home window when returning from a solver"""
         self.show()
