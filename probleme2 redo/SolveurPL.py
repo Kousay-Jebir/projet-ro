@@ -5,13 +5,21 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QWidget, QL
 from PyQt5.QtGui import QPixmap, QFont, QBrush, QPalette, QColor
 from PyQt5.QtCore import Qt
 from PyQt5 import QtGui
-from PL import solve_lp
+# from PL import solve_lp
 from gurobipy import GRB
+import importlib.util
+import os
+
+# Dynamically import PL from the same directory as this file
+spec = importlib.util.spec_from_file_location("PL", os.path.join(os.path.dirname(__file__), "PL.py"))
+PL = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(PL)
+solve_lp = PL.solve_lp
 
 class LPApp(QMainWindow):
-    def __init__(self):
+    def __init__(self, home_window=None):
         super().__init__()
-
+        self.home_window = home_window
         self.setWindowTitle("Solveur de Problèmes de Programmation Linéaire")
         self.setGeometry(100, 100, 800, 600)
         self.initUI()
@@ -90,6 +98,17 @@ class LPApp(QMainWindow):
 
         self.variable_names = []
         self.coefficients = []
+
+        # Add Back to Home button if home_window is provided
+        if self.home_window is not None:
+            self.back_button = self.createStyledButton("Retour à l'accueil", self.back_to_home, color="#6c5ce7")
+            self.layout.addWidget(self.back_button)
+            self.layout.setAlignment(self.back_button, Qt.AlignCenter)
+
+    def back_to_home(self):
+        self.close()
+        if self.home_window is not None:
+            self.home_window.show_returned()
 
     def createStyledLabel(self, text, font_size):
         label = QLabel(text, self)
@@ -279,7 +298,7 @@ class LPApp(QMainWindow):
 
             objective_type = GRB.MINIMIZE if self.objective_type_input.currentText().lower() == 'minimiser' else GRB.MAXIMIZE
 
-            result = solve_lp(self.variable_names, self.coefficients, A, b, sens, objective_type)
+            result = PL.solve_lp(self.variable_names, self.coefficients, A, b, sens, objective_type)
 
             if result["objective_value"] is not None:
                 result_text = f"Valeur optimale de l'objectif: {result['objective_value']}\n"

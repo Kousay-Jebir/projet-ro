@@ -215,17 +215,22 @@ class HomeWindow(QMainWindow):
             )
     def open_resource_mgmt(self):
         try:
+            import importlib.util
             project_root = str(Path(__file__).parent)
             if project_root not in sys.path:
                 sys.path.append(project_root)
-            
-            from probleme2.main import ResourceAllocator
-            self.solver = ResourceAllocator(home_window=self)  # Pass self as home_window
+            module_path = Path(project_root) / "probleme2 redo" / "SolveurPL.py"
+            print(f"Loading module from: {module_path}")
+            spec = importlib.util.spec_from_file_location("probleme2_redo.SolveurPL", str(module_path))
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            LPApp = getattr(module, "LPApp")
+            self.solver = LPApp(home_window=self)
             self.solver.show()
             self.hide()
         except Exception as e:
             print(e)
-            QMessageBox.critical(self, "Error", f"Failed to load resource allocator:\n{str(e)}")
+            QMessageBox.critical(self, "Error", f"Failed to load resource allocator (probleme2 redo):\n{str(e)}")
     def show_returned(self):
         """Show the home window when returning from a solver"""
         self.show()
